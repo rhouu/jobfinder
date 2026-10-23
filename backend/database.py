@@ -13,6 +13,8 @@ Tables
   reviews          internship reviews written by former interns
   saved_searches   a student's saved search: new matching offers trigger an alert
   directory        public company directory (Marrakech businesses, loaded from data/companies.csv)
+  company_contacts private email of a directory company (never sent to the browser)
+  spontaneous_applications  a student's CV emailed to a directory company
 """
 import os
 from datetime import datetime, timezone
@@ -96,6 +98,7 @@ class User(Base):
     notifications: Mapped[list["Notification"]] = relationship(cascade="all, delete-orphan")
     reviews: Mapped[list["Review"]] = relationship(back_populates="student", cascade="all, delete-orphan")
     searches: Mapped[list["SavedSearch"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    spontaneous: Mapped[list["SpontaneousApplication"]] = relationship(back_populates="student", cascade="all, delete-orphan")
 
     def public(self) -> dict:
         return {"id": self.id, "email": self.email, "name": self.name, "role": self.role,
@@ -373,8 +376,40 @@ class DirectoryCompany(Base):
     reviews: Mapped[int] = mapped_column(Integer, default=0)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    contact: Mapped["CompanyContact | None"] = relationship(back_populates="company", lazy="selectin", cascade="all, delete-orphan")
 
-    def to_dict(self) -> dict:
+    @property
+    def can_apply(self) -> bool:
+        return bool(self.contact and not self.contact.opted_out)
+
+    def to_dict(self) -> dict:  # the email itself is never included
         return {"id": self.id, "name": self.name, "sector": self.sector, "category": self.category, "city": self.city,
                 "area": self.area, "website": self.website, "maps_url": self.maps_url, "rating": self.rating,
-                "reviews": self.reviews, "latitude": self.latitude, "longitude": self.longitude}
+                "reviews": self.reviews, "latitude": self.latitude, "longitude": self.longitude, "can_apply": self.can_apply}
+
+
+class CompanyContact(Base):
+    """Email of a directory company, used only to send it spontaneous applications. Loaded from data/company_emails.csv."""
+    __tablename__ = "company_contacts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    directory_id: Mapped[int] = mapped_column(ForeignKey("directory.id", ondelete="CASCADE"), unique=True)
+    email: Mapped[str] = mapped_column(String(255))
+    opted_out: Mapped[bool] = mapped_column(Boolean, default=False)  # the company asked not to receive applications
+    company: Mapped[DirectoryCompany] = relationship(back_populates="contact")
+
+
+class SpontaneousApplication(Base):
+    """A student's application (message + CV) emailed to a directory company."""
+    __tablename__ = "spontaneous_applications"
+    __table_args__ = (UniqueConstraint("student_id", "directory_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    directory_id: Mapped[int] = mapped_column(ForeignKey("directory.id", ondelete="CASCADE"))
+    message: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    student: Mapped[User] = relationship(back_populates="spontaneous")
+    company: Mapped[DirectoryCompany] = relationship()
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "directory_id": self.directory_id, "company": self.company.name, "sector": self.company.sector,
+                "city": self.company.city, "message": self.message, "created_at": iso(self.created_at)}

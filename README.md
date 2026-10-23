@@ -40,6 +40,9 @@ Copy `.env.example` to `.env`, then:
 | Production | `SECRET_KEY`, `ADMIN_PASSWORD`, `SITE_URL` |
 
 Without SMTP, emails (verification and reset links included) are printed in the server console, so you can click the link from there.
+Spontaneous applications are the exception: they need real SMTP. With Gmail: turn on 2-step verification, create an
+**app password** (Google account > Security > App passwords), then set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`,
+`SMTP_USER` / `SMTP_SENDER` = the Gmail address, `SMTP_PASSWORD` = the app password. Gmail sends up to ~500 emails a day.
 
 ## Put it online (Render)
 
@@ -60,6 +63,12 @@ and **job alerts**: a student saves the current filters, and every new matching 
 
 **Companies page:** search the Marrakech directory by name, activity or area, filter by sector, and see the companies
 hiring right now. A company that finds itself there can click "This is my company" to create its account.
+
+**Spontaneous applications:** 228 directory companies have a known email (kept private in `data/company_emails.csv`,
+never sent to the browser). Their card shows **Send my application**: the student writes a message, attaches a PDF CV,
+and the site emails it to the company with **Reply-To = the student's email**, so the answer lands in the student's own
+mailbox. Limits: confirmed email required, one application per company, 5 per day. Every email has a link the company
+can click to stop receiving applications. Needs the `SMTP_…` settings (see below).
 
 **Students:** profile (or upload a PDF CV to fill it), offers ranked by match score, saved offers, application board,
 messages with companies, interview invitations, AI CV / cover letter / portfolio, mock interviews with feedback,

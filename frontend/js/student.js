@@ -133,7 +133,19 @@ function uploadCv(file) {
 }
 
 // -------------------------------------------------------- Applications
+async function loadSpontaneous() {
+  try {
+    const list = await API.get("/api/student/spontaneous");
+    $("#spontBox").innerHTML = `<div class="card-title"><h3>${t("spont.listTitle")}</h3><a class="small" href="/companies.html">${t("spont.findMore")}</a></div>
+      <p class="muted small" style="margin-bottom:12px">${t("spont.listSub")}</p>
+      ${list.map((r) => `<div class="recent-user"><span class="k-icon" style="--kc:var(--primary)">${icon("send", 16)}</span>
+        <div class="grow" style="min-width:0"><strong class="ellipsis">${esc(r.company)}</strong><div class="muted small">${esc(sectorLabel(r.sector))} · ${esc(r.city)}</div></div>
+        <span class="muted small">${dateStr(r.created_at)}</span></div>`).join("") || `<div class="muted small">${t("spont.listEmpty")}</div>`}`;
+  } catch (err) { $("#spontBox").innerHTML = `<div class="muted small">${esc(err.message)}</div>`; }
+}
+
 async function loadApplications() {
+  loadSpontaneous();
   const board = $("#kanban");
   board.innerHTML = '<div class="skeleton" style="height:300px;grid-column:1/-1"></div>';
   try {

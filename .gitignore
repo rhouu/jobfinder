@@ -7,3 +7,6 @@ jobfinder.db
 *.docx
 *.db-journal
 .DS_Store
+
+# Company contact emails: private, only push once the GitHub repository is private
+data/company_emails.csv

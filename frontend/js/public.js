@@ -218,6 +218,8 @@ function companiesPage() {
   const p = params();
   const state = { q: p.q || "", sector: p.sector || "", page: +p.page || 1 };
   let hiring = [];
+  const user = Auth.user();
+  const sent = new Set(); // directory companies this student already emailed
   $("#dq").value = state.q;
 
   const saveUrl = () => {
@@ -265,11 +267,47 @@ function companiesPage() {
             ${c.website ? `<a class="btn btn-ghost btn-sm" href="${esc(c.website)}" target="_blank" rel="noopener nofollow">${icon("globe", 14)} ${t("dir.website")}</a>` : ""}
             ${c.maps_url ? `<a class="btn btn-ghost btn-sm" href="${esc(c.maps_url)}" target="_blank" rel="noopener nofollow">${icon("pin", 14)} ${t("dir.map")}</a>` : ""}
           </div>
+          ${c.can_apply ? `<button class="btn ${sent.has(c.id) ? "btn-ghost" : "btn-primary"} btn-sm btn-block" data-apply="${c.id}" ${sent.has(c.id) ? "disabled" : ""}>
+            ${icon(sent.has(c.id) ? "check" : "send", 14)} ${t(sent.has(c.id) ? "spont.sent" : "spont.send")}</button>` : ""}
           <div class="dir-foot"><span class="badge">${t("dir.notOnSite")}</span>
             <a class="link-btn" href="/auth.html?mode=register&role=company&company=${encodeURIComponent(c.name)}">${t("dir.claim")}</a></div>
         </div>
       </article>`).join("") : `<div class="card empty" style="grid-column:1/-1">${icon("search", 36)}<h3>${t("dir.none")}</h3></div>`;
+    $$("[data-apply]", $("#dirGrid")).forEach((b) => b.addEventListener("click", () => openSpontaneous(data.items.find((c) => c.id === +b.dataset.apply), b)));
     pages(data);
+  }
+
+  // Spontaneous application: message + CV emailed to the company; its reply goes to the student's own mailbox
+  function openSpontaneous(company, button) {
+    if (!user) { location.href = `/auth.html?next=${encodeURIComponent(location.pathname + location.search)}`; return; }
+    if (user.role !== "student") return toast(t("spont.studentsOnly"), "error");
+    modal({
+      title: t("spont.title", { company: company.name }),
+      body: `<p class="muted" style="margin-bottom:14px">${t("spont.intro", { company: company.name })}</p>
+        <div class="field"><label for="spMsg">${t("spont.message")}</label>
+          <textarea class="input" id="spMsg" rows="9">${esc(t("spont.template", { company: company.name, name: user.name }, true))}</textarea></div>
+        <div class="field"><label for="spCv">${t("spont.cv")}</label><input class="input" type="file" id="spCv" accept="application/pdf"></div>
+        <p class="notice small">${icon("mail", 15)} <span>${t("spont.privacy", { email: user.email })}</span></p>`,
+      footer: `<button class="btn btn-ghost" data-close>${t("common.cancel")}</button><button class="btn btn-primary" id="spSend">${icon("send", 15)} ${t("spont.submit")}</button>`,
+      onOpen: (el, close) => $("#spSend", el).addEventListener("click", (e) => {
+        const btn = e.currentTarget, file = $("#spCv", el).files[0], message = $("#spMsg", el).value.trim();
+        if (message.length < 30) return toast(t("spont.short"), "error");
+        if (!file || file.type !== "application/pdf" || file.size > 2 * 1024 * 1024) return toast(t("spont.cvInvalid"), "error");
+        const reader = new FileReader();
+        reader.onload = () => withLoading(btn, async () => {
+          try {
+            await API.post(`/api/directory/${company.id}/apply`, { message, cv_name: file.name, cv_base64: reader.result });
+            sent.add(company.id);
+            button.disabled = true;
+            button.className = "btn btn-ghost btn-sm btn-block";
+            button.innerHTML = `${icon("check", 14)} ${t("spont.sent")}`;
+            close();
+            toast(t("spont.done", { company: company.name }), "success");
+          } catch (err) { toast(err.message, "error"); }
+        });
+        reader.readAsDataURL(file);
+      }),
+    });
   }
 
   function pages({ page, pages: n }) {
@@ -290,7 +328,9 @@ function companiesPage() {
   const refresh = () => { saveUrl(); drawHiring(); loadDirectory(); };
   $("#dq").addEventListener("input", debounce((e) => { Object.assign(state, { q: e.target.value.trim(), page: 1 }); refresh(); }, 350));
   API.get("/api/companies").then((list) => { hiring = list; drawHiring(); }).catch(() => {});
-  loadDirectory();
+  if (user?.role === "student") {
+    API.get("/api/student/spontaneous").then((list) => { list.forEach((r) => sent.add(r.directory_id)); loadDirectory(); }).catch(() => loadDirectory());
+  } else loadDirectory();
 }
 
 // ============================================================ Job detail

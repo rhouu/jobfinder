@@ -28,11 +28,11 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from . import ai
-from .database import (FRONTEND_DIR, GOOGLE_CLIENT_ID, Application, Base, Company, DirectoryCompany, Job, Message,
-                       Notification, Review,
+from .database import (FRONTEND_DIR, GOOGLE_CLIENT_ID, SITE_URL, Application, Base, Company, DirectoryCompany, Job, Message,
+                       Notification, Review, SpontaneousApplication,
                        SavedJob, SavedSearch, StudentProfile, User, engine, get_db, utcnow)
-from .helpers import (current_user, guess_sector, hash_password, login_response, make_token, match_job, notify, optional_user,
-                      read_token, require_role, send_email, verify_password)
+from .helpers import (check_signature, current_user, guess_sector, hash_password, login_response, mail_enabled, make_token,
+                      match_job, notify, optional_user, read_token, require_role, send_email, send_mail, sign, verify_password)
 from .seed import seed
 
 logging.basicConfig(level=logging.INFO)
@@ -67,7 +67,7 @@ def favicon():
 
 @app.get("/api/config")
 def public_config():
-    return {"google_client_id": GOOGLE_CLIENT_ID, "ai_enabled": ai.ai_available()}
+    return {"google_client_id": GOOGLE_CLIENT_ID, "ai_enabled": ai.ai_available(), "mail_enabled": mail_enabled()}
 
 
 THEMES = {"emerald": ("#10b981", "#06b6d4", "#06100d"), "sunset": ("#f97316", "#ec4899", "#140a0b"),
@@ -363,6 +363,80 @@ def company_directory(q: str = "", sector: str = "", page: int = 1, per_page: in
     rows = db.scalars(stmt.order_by(DirectoryCompany.reviews.desc(), DirectoryCompany.name).offset((page - 1) * per_page).limit(per_page))
     return {"items": [c.to_dict() for c in rows], "total": total, "page": page, "pages": max(1, -(-total // per_page)),
             "sectors": sectors}
+
+
+# --------------------------------------------------------- spontaneous applications (email + CV)
+class SpontaneousIn(BaseModel):
+    message: str = Field(min_length=30, max_length=3000)
+    cv_name: str = Field(default="CV.pdf", max_length=120)
+    cv_base64: str
+
+
+SPONTANEOUS_PER_DAY = 5  # limits abuse: a student can't use the site to spam companies
+
+
+@app.post("/api/directory/{company_id}/apply")
+def spontaneous_apply(company_id: int, data: SpontaneousIn, user: User = Depends(student_only), db: Session = Depends(get_db)):
+    """Emails the student's message + CV to a directory company. Answers go straight to the student (Reply-To)."""
+    company = db.get(DirectoryCompany, company_id)
+    if not company or not company.can_apply:
+        raise HTTPException(404, "This company can't receive applications through JobFinder.")
+    if not mail_enabled():
+        raise HTTPException(503, "Sending emails isn't set up on this site yet. Please try again later.")
+    if not user.email_verified:
+        raise HTTPException(400, "Confirm your email address first (check your inbox), so the company can reply to you.")
+    if db.scalar(select(SpontaneousApplication.id).where(SpontaneousApplication.student_id == user.id,
+                                                          SpontaneousApplication.directory_id == company.id)):
+        raise HTTPException(400, "You already sent your application to this company.")
+    today = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    if db.scalar(select(func.count(SpontaneousApplication.id)).where(SpontaneousApplication.student_id == user.id,
+                                                                     SpontaneousApplication.created_at >= today)) >= SPONTANEOUS_PER_DAY:
+        raise HTTPException(429, f"You can send {SPONTANEOUS_PER_DAY} applications per day. Try again tomorrow.")
+    try:
+        pdf = base64.b64decode(data.cv_base64.split(",")[-1], validate=True)
+    except ValueError:
+        raise HTTPException(400, "Invalid file.")
+    if len(pdf) > 2 * 1024 * 1024 or not pdf.startswith(b"%PDF"):
+        raise HTTPException(400, "Please attach your CV as a PDF file under 2 MB.")
+    file_name = re.sub(r"[^\w.\- ]", "", data.cv_name).strip() or "CV.pdf"
+    if not file_name.lower().endswith(".pdf"):
+        file_name += ".pdf"
+
+    optout = f"{SITE_URL}/api/directory/{company.id}/optout?sig={sign(f'optout:{company.id}')}"
+    body = (f"{data.message.strip()}\n\n{user.name}\n{user.email}\n\n"
+            f"----\n"
+            f"Candidature envoyée via JobFinder.ma par {user.name}. Répondez à cet e-mail pour contacter directement le candidat. CV en pièce jointe.\n"
+            f"Application sent through JobFinder.ma by {user.name}. Reply to this email to contact the candidate directly. CV attached.\n"
+            f"Ne plus recevoir de candidatures via JobFinder.ma / Stop receiving applications: {optout}")
+    if not send_mail(company.contact.email, f"Candidature spontanée – {user.name}", body, reply_to=user.email,
+                     attachment=(file_name, pdf)):
+        raise HTTPException(502, "The email couldn't be sent. Please try again in a few minutes.")
+    row = SpontaneousApplication(student_id=user.id, directory_id=company.id, message=data.message.strip())
+    db.add(row)
+    send_email(user, "spontaneous_sent", {"company": company.name, "message": data.message.strip(), "link": "/dashboard.html#applications"})
+    db.commit()
+    return row.to_dict()
+
+
+@app.get("/api/directory/{company_id}/optout", response_class=HTMLResponse)
+def spontaneous_optout(company_id: int, sig: str = "", db: Session = Depends(get_db)):
+    """Link at the bottom of every application email: the company stops receiving them."""
+    company = db.get(DirectoryCompany, company_id)
+    if not company or not company.contact or not check_signature(f"optout:{company_id}", sig):
+        raise HTTPException(404, "Invalid link.")
+    company.contact.opted_out = True
+    db.commit()
+    return (f"<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+            f"<title>JobFinder.ma</title><body style='font-family:system-ui;max-width:560px;margin:60px auto;padding:0 16px;line-height:1.6'>"
+            f"<h2>{escape(company.name)}</h2><p>Vous ne recevrez plus de candidatures via JobFinder.ma.</p>"
+            f"<p>You will no longer receive applications through JobFinder.ma.</p><p><a href='/'>JobFinder.ma</a></p></body>")
+
+
+@app.get("/api/student/spontaneous")
+def my_spontaneous(user: User = Depends(student_only), db: Session = Depends(get_db)):
+    rows = db.scalars(select(SpontaneousApplication).where(SpontaneousApplication.student_id == user.id)
+                      .order_by(SpontaneousApplication.created_at.desc()))
+    return [r.to_dict() for r in rows]
 
 
 @app.get("/api/companies/{company_id}/logo")
@@ -1147,6 +1221,7 @@ def admin_stats(days: int = 30, _: User = Depends(admin_only), db: Session = Dep
                                              .where(Company.is_external.is_(True))),
                    "acceptance_rate": round(100 * count(Application, Application.status == "accepted") / max(1, total_apps)),
                    "reviews": count(Review), "new_reviews_week": count(Review, Review.created_at >= week),
+                   "spontaneous": count(SpontaneousApplication),
                    "messages": count(Message),
                    "unverified_emails": count(User, User.email_verified.is_(False), User.role != "admin")},
         "timeline": {"labels": [d.isoformat() for d in day_list], "users": per_day(User.created_at),

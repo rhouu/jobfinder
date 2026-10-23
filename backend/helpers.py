@@ -60,6 +60,15 @@ def make_token(user: User, purpose: str = "login", hours: int = 72) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
 
+def sign(value: str) -> str:
+    """Short signature for links that need no login (e.g. a company's "stop receiving applications" link)."""
+    return hmac.new(SECRET_KEY.encode(), value.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def check_signature(value: str, signature: str) -> bool:
+    return hmac.compare_digest(sign(value), signature or "")
+
+
 def read_token(token: str, purpose: str, db: Session) -> User | None:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
@@ -185,6 +194,11 @@ EMAILS = {  # kind -> language -> (subject, body). {placeholders} come from `dat
         "fr": ("Des candidats vous attendent", "Bonjour {name},\n\nVotre entreprise est vérifiée. {n} étudiants ont postulé à vos offres avant votre arrivée sur JobFinder.ma.\n\nVoyez-les ici : {link}"),
         "ar": ("مرشحون بانتظارك", "مرحبًا {name}،\n\nتم توثيق شركتك. تقدّم {n} طالب لعروضك قبل انضمامك إلى JobFinder.ma.\n\nشاهدهم هنا: {link}"),
     },
+    "spontaneous_sent": {
+        "en": ("Your application was sent to {company}", "Hello {name},\n\nYour application and CV were emailed to {company}. If they answer, the reply will arrive in this mailbox.\n\nYour message:\n{message}\n\nAll your applications: {link}"),
+        "fr": ("Votre candidature a été envoyée à {company}", "Bonjour {name},\n\nVotre candidature et votre CV ont été envoyés par e-mail à {company}. S'ils répondent, la réponse arrivera dans cette boîte mail.\n\nVotre message :\n{message}\n\nToutes vos candidatures : {link}"),
+        "ar": ("تم إرسال طلبك إلى {company}", "مرحبًا {name}،\n\nتم إرسال طلبك وسيرتك الذاتية بالبريد إلى {company}. إذا ردّوا، سيصل الرد إلى هذا البريد.\n\nرسالتك:\n{message}\n\nكل طلباتك: {link}"),
+    },
     "reset": {
         "en": ("Reset your password", "Hello {name},\n\nChoose a new password here:\n{link}\n\nThis link expires in 1 hour. If you didn't ask for it, ignore this email."),
         "fr": ("Réinitialisez votre mot de passe", "Bonjour {name},\n\nChoisissez un nouveau mot de passe ici :\n{link}\n\nCe lien expire dans 1 heure. Si vous n'avez rien demandé, ignorez cet e-mail."),
@@ -223,23 +237,35 @@ def send_email(user: User, kind: str, data: dict) -> None:
         values["link"] = SITE_URL + values["link"]
     subject, body = (part.format(**values) for part in EMAILS[kind][lang])
 
-    def deliver():
-        if not SMTP["host"]:
-            log.info("EMAIL (no SMTP configured) to %s\nSubject: %s\n%s", user.email, subject, body)
-            return
-        msg = EmailMessage()
-        msg["From"], msg["To"], msg["Subject"] = SMTP["sender"] or SMTP["user"], user.email, subject
-        msg.set_content(body)
-        try:
-            with smtplib.SMTP(SMTP["host"], int(SMTP["port"] or 587), timeout=15) as server:
-                server.starttls()
-                if SMTP["user"]:
-                    server.login(SMTP["user"], SMTP["password"])
-                server.send_message(msg)
-        except (OSError, smtplib.SMTPException) as exc:
-            log.warning("Could not send email to %s: %s", user.email, exc)
+    if not mail_enabled():
+        log.info("EMAIL (no SMTP configured) to %s\nSubject: %s\n%s", user.email, subject, body)
+        return
+    threading.Thread(target=send_mail, args=(user.email, subject, body), daemon=True).start()
 
-    threading.Thread(target=deliver, daemon=True).start()
+
+def mail_enabled() -> bool:
+    return bool(SMTP["host"])
+
+
+def send_mail(to: str, subject: str, body: str, reply_to: str = "", attachment: tuple[str, bytes] | None = None) -> bool:
+    """Sends one email now. reply_to: where answers go. attachment: (file name, PDF bytes). Returns False on failure."""
+    msg = EmailMessage()
+    msg["From"], msg["To"], msg["Subject"] = SMTP["sender"] or SMTP["user"], to, subject
+    if reply_to:
+        msg["Reply-To"] = reply_to
+    msg.set_content(body)
+    if attachment:
+        msg.add_attachment(attachment[1], maintype="application", subtype="pdf", filename=attachment[0])
+    try:
+        with smtplib.SMTP(SMTP["host"], int(SMTP["port"] or 587), timeout=20) as server:
+            server.starttls()
+            if SMTP["user"]:
+                server.login(SMTP["user"], SMTP["password"])
+            server.send_message(msg)
+        return True
+    except (OSError, smtplib.SMTPException) as exc:
+        log.warning("Could not send email to %s: %s", to, exc)
+        return False
 
 
 # =========================================================== 6. Notifications

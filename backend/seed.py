@@ -4,6 +4,8 @@ SEED — runs on every start, but only fills empty tables (so it never duplicate
   2. data/offers.csv     real offers collected from Jooble. They are shown as external offers:
                          students apply on the original website ("Apply on Jooble").
   3. data/companies.csv  the public company directory (Marrakech). Public business info only, no contacts.
+  4. data/company_emails.csv  private emails of some directory companies (maps_url, email), used only to
+                         send them spontaneous applications. Never shown on the site.
 """
 import csv
 import logging
@@ -13,7 +15,7 @@ from datetime import datetime
 
 from sqlalchemy import func, select
 
-from .database import ADMIN_EMAIL, ADMIN_PASSWORD, BASE_DIR, Company, DirectoryCompany, Job, SessionLocal, User
+from .database import ADMIN_EMAIL, ADMIN_PASSWORD, BASE_DIR, Company, CompanyContact, DirectoryCompany, Job, SessionLocal, User
 from .helpers import directory_sector, guess_sector, hash_password
 
 log = logging.getLogger("jobfinder.seed")
@@ -103,6 +105,19 @@ def import_directory(db) -> int:
     return len(rows)
 
 
+def import_contacts(db) -> int:
+    path = DATA_DIR / "company_emails.csv"
+    if not path.exists():
+        return 0
+    ids = dict(db.execute(select(DirectoryCompany.maps_url, DirectoryCompany.id)).all())
+    n = 0
+    for r in csv.DictReader(open(path, encoding="utf-8", newline="")):
+        if r["maps_url"] in ids and "@" in r["email"]:
+            db.add(CompanyContact(directory_id=ids[r["maps_url"]], email=r["email"].strip().lower()))
+            n += 1
+    return n
+
+
 def seed() -> None:
     db = SessionLocal()
     try:
@@ -114,6 +129,9 @@ def seed() -> None:
             log.info("Imported %d offers from data/offers.csv", import_offers(db))
         if not db.scalar(select(func.count(DirectoryCompany.id))):
             log.info("Imported %d companies from data/companies.csv", import_directory(db))
+            db.flush()
+        if not db.scalar(select(func.count(CompanyContact.id))):
+            log.info("Imported %d company emails from data/company_emails.csv", import_contacts(db))
         db.commit()
     finally:
         db.close()
