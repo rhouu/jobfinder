@@ -659,3 +659,6 @@ a.todo-item:hover { background: var(--primary-soft); }
 /* 6-digit email code */
 .code-input { text-align: center; font-size: 1.8rem; font-weight: 800; letter-spacing: 0.5em; padding-inline-start: 0.5em; max-width: 280px; margin: 0 auto; display: block; font-variant-numeric: tabular-nums; }
 #codeCard .link-btn { display: block; margin-inline: auto; }
+/* Google button: its frame must not inherit the dark colour scheme (that draws a white box around it) */
+.google-btn { display: flex; justify-content: center; min-height: 44px; color-scheme: normal; }
+.google-btn iframe { color-scheme: normal; }

@@ -33,7 +33,6 @@
             <label><input type="radio" name="role" value="company"><div class="role-box"><i data-icon="building" data-size="24"></i><strong data-i18n="auth.company"></strong><div class="muted small" data-i18n="auth.companySub"></div></div></label>
           </div>
         </div>
-        <div id="googleWrap" class="hidden"><div id="googleBtn" style="display:flex;justify-content:center;min-height:44px"></div><div class="divider" data-i18n="auth.orEmail"></div></div>
         <form id="authForm" class="form-grid" style="grid-template-columns:1fr" novalidate>
           <div class="field hidden" data-only="register"><label for="name" data-i18n="auth.name"></label><input class="input" id="name" name="name" autocomplete="name"></div>
           <div class="field hidden" data-only="company"><label for="company_name" data-i18n="auth.companyName"></label><input class="input" id="company_name" name="company_name"></div>
@@ -43,6 +42,8 @@
           <button class="btn btn-primary btn-lg btn-block" type="submit" id="submitBtn"></button>
           <button type="button" class="link-btn" id="forgotLink" data-i18n="auth.forgot"></button>
         </form>
+        <!-- Google Sign-In: shown when GOOGLE_CLIENT_ID is set on the server -->
+        <div id="googleWrap" class="hidden"><div class="divider" data-i18n="auth.or"></div><div id="googleBtn" class="google-btn"></div></div>
       </div>
 
       <!-- 6-digit code sent by email to confirm the address -->

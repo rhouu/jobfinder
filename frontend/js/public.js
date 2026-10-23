@@ -605,7 +605,7 @@ function authPage() {
         callback: async (resp) => { try { done(await API.post("/api/auth/google", { credential: resp.credential, role: role() })); } catch (err) { toast(err.message, "error"); } },
       });
       $("#googleWrap").classList.remove("hidden");
-      google.accounts.id.renderButton($("#googleBtn"), { theme: document.documentElement.dataset.theme === "light" ? "outline" : "filled_black",
+      google.accounts.id.renderButton($("#googleBtn"), { theme: "outline",
         size: "large", shape: "pill", text: "continue_with", locale: LANG, width: Math.min(400, $("#googleBtn").offsetWidth || 360) });
     };
     document.head.appendChild(s);

@@ -341,7 +341,7 @@ const T = {
   "auth.studentSub": ["Find jobs & internships", "Trouver emplois et stages", "ابحث عن وظائف وتداريب"],
   "auth.company": ["Company", "Entreprise", "شركة"],
   "auth.companySub": ["Hire young talent", "Recruter de jeunes talents", "وظّف مواهب شابة"],
-  "auth.orEmail": ["or continue with email", "ou continuer avec un e-mail", "أو تابع بالبريد الإلكتروني"],
+  "auth.or": ["or", "ou", "أو"],
   "auth.name": ["Full name", "Nom complet", "الاسم الكامل"],
   "auth.companyName": ["Company name", "Nom de l'entreprise", "اسم الشركة"],
   "auth.email": ["Email", "E-mail", "البريد الإلكتروني"],
