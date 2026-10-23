@@ -495,9 +495,11 @@ class MessageIn(BaseModel):
 @app.post("/api/messages/{app_id}")
 def send_message(app_id: int, data: MessageIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     a = _conversation(app_id, user, db)
+    receiver = a.job.company.owner if user.id == a.student_id else a.student
+    if not receiver:
+        raise HTTPException(400, "This company hasn't joined JobFinder yet. You can message them once they do.")
     msg = Message(application_id=a.id, sender_id=user.id, body=data.body.strip())
     db.add(msg)
-    receiver = a.job.company.owner if user.id == a.student_id else a.student
     link = "/company.html#messages" if receiver.role == "company" else "/dashboard.html#messages"
     already_told = db.scalar(select(Notification).where(Notification.user_id == receiver.id, Notification.kind == "message",
                                                         Notification.is_read.is_(False), Notification.link == f"{link}/{a.id}"))
@@ -617,14 +619,13 @@ def apply(data: ApplyIn, user: User = Depends(student_only), db: Session = Depen
     job = db.get(Job, data.job_id)
     if not job or job.status != "open":
         raise HTTPException(404, "This offer is no longer accepting applications.")
-    if job.external_url:
-        raise HTTPException(400, "This offer is published on another website: use the 'Apply' button to apply there.")
     if db.scalar(select(Application).where(Application.job_id == job.id, Application.student_id == user.id)):
         raise HTTPException(400, "You already applied to this offer.")
     a = Application(job_id=job.id, student_id=user.id, cover_letter=data.cover_letter.strip(),
                     match_score=match_job(_profile(user, db), job)["score"])
     db.add(a)
-    notify(db, job.company.owner, "new_application", {"name": user.name, "job": job.title}, "/company.html#applicants")
+    if job.company.owner:  # companies from job boards have no account yet: the application waits for them
+        notify(db, job.company.owner, "new_application", {"name": user.name, "job": job.title}, "/company.html#applicants")
     db.commit()
     return a.to_dict()
 
@@ -1142,6 +1143,8 @@ def admin_stats(days: int = 30, _: User = Depends(admin_only), db: Session = Dep
                    "site_jobs": count(Job, open_job, Job.source == ""),
                    "external_jobs": count(Job, open_job, Job.source != ""),
                    "applications": total_apps, "new_apps_week": count(Application, Application.created_at >= week),
+                   "waiting_apps": db.scalar(select(func.count(Application.id)).join(Job).join(Company)
+                                             .where(Company.is_external.is_(True))),
                    "acceptance_rate": round(100 * count(Application, Application.status == "accepted") / max(1, total_apps)),
                    "reviews": count(Review), "new_reviews_week": count(Review, Review.created_at >= week),
                    "messages": count(Message),
@@ -1217,8 +1220,27 @@ def admin_verify_company(company_id: int, data: VerifyDecision, _: User = Depend
             job.status = "closed"
     if data.status in ("verified", "rejected") and company.owner:
         notify(db, company.owner, "verification", {"status": data.status}, "/company.html#profile")
+    if data.status == "verified" and company.owner:
+        _take_over_external(company, db)
     db.commit()
     return company.to_dict(private=True)
+
+
+def _take_over_external(company: Company, db: Session) -> None:
+    """When a company is verified, it takes over the job-board copy of itself (same name):
+    its offers and the applications students sent while it wasn't on JobFinder yet."""
+    external = db.scalar(select(Company).where(Company.is_external.is_(True),
+                                               func.lower(Company.name) == company.name.strip().lower()))
+    if not external:
+        return
+    apps = [a for job in external.jobs for a in job.applications]
+    for job in list(external.jobs):
+        job.company = company
+    db.delete(external)
+    for a in apps:
+        notify(db, a.student, "application_forwarded", {"job": a.job.title, "company": company.name}, "/dashboard.html#applications")
+    if apps:
+        notify(db, company.owner, "applications_waiting", {"n": len(apps)}, "/company.html#applicants", email=True)
 
 
 @app.get("/api/admin/jobs")

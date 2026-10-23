@@ -308,11 +308,16 @@ function jobPage() {
   });
 
   function applyBox() {
-    if (job.external_url) { // offer published on another job board: students apply there
-      return `<a class="btn btn-primary btn-block btn-lg" href="${esc(job.external_url)}" target="_blank" rel="noopener nofollow">${t("job.applyExternal", { source: job.source })} ${icon("arrow", 16)}</a>
-        <p class="muted small" style="margin-top:10px;text-align:center">${t("job.externalInfo", { source: job.source })}</p>
-        ${user && user.role === "student" ? `<button class="btn btn-ghost btn-block" id="saveBtn" style="margin-top:10px">${icon("bookmark", 16)} <span>${t(job.saved ? "job.saved" : "job.save")}</span></button>` : ""}`;
-    }
+    if (!job.external_url) return mainApply();
+    // offer from a job board: apply here (kept until the company joins) or directly on the original site
+    return `${mainApply()}
+      <div class="external-apply">
+        <p class="muted small">${t("job.externalInfo", { source: job.source })}</p>
+        <a class="btn btn-ghost btn-block btn-sm" href="${esc(job.external_url)}" target="_blank" rel="noopener nofollow">${t("job.applyExternal", { source: job.source })} ${icon("arrow", 14)}</a>
+      </div>`;
+  }
+
+  function mainApply() {
     if (!user) return `<a class="btn btn-primary btn-block btn-lg" href="/auth.html?next=${encodeURIComponent(location.pathname + location.search)}">${t("job.signInApply")}</a>`;
     if (user.role !== "student") return `<p class="muted" style="text-align:center">${t("job.studentsOnly")}</p>`;
     if (job.applied) return `<div class="badge badge-green" style="width:100%;justify-content:center;padding:12px">${icon("check", 16)} ${t("job.applied")}</div>

@@ -651,3 +651,7 @@ a.todo-item:hover { background: var(--primary-soft); }
 /* Home page: one photo behind the search area */
 .hero.photo-bg { padding: 100px 0 96px; border: 0; background-image: radial-gradient(ellipse at center, rgba(26, 28, 30, 0.55), rgba(26, 28, 30, 0.25) 70%), linear-gradient(rgba(30, 36, 34, 0.6), rgba(46, 34, 30, 0.45)), var(--photo); }
 .hero.photo-bg .lead { color: rgba(255, 255, 255, 0.94); }
+
+/* Offer from a job board: second way to apply */
+.external-apply { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); display: grid; gap: 10px; text-align: center; }
+.notice { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--primary-soft); color: var(--text); }

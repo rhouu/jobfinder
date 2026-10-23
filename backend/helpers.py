@@ -180,6 +180,11 @@ EMAILS = {  # kind -> language -> (subject, body). {placeholders} come from `dat
         "fr": ("Confirmez votre e-mail", "Bonjour {name},\n\nBienvenue sur JobFinder.ma ! Confirmez votre adresse e-mail :\n{link}\n\nCe lien expire dans 48 heures."),
         "ar": ("أكّد بريدك الإلكتروني", "مرحبًا {name}،\n\nمرحبًا بك في JobFinder.ma! أكّد بريدك الإلكتروني:\n{link}\n\nتنتهي صلاحية هذا الرابط خلال 48 ساعة."),
     },
+    "applications_waiting": {
+        "en": ("Candidates are waiting for you", "Hello {name},\n\nYour company is verified. {n} students applied to your offers before you joined JobFinder.ma.\n\nSee them here: {link}"),
+        "fr": ("Des candidats vous attendent", "Bonjour {name},\n\nVotre entreprise est vérifiée. {n} étudiants ont postulé à vos offres avant votre arrivée sur JobFinder.ma.\n\nVoyez-les ici : {link}"),
+        "ar": ("مرشحون بانتظارك", "مرحبًا {name}،\n\nتم توثيق شركتك. تقدّم {n} طالب لعروضك قبل انضمامك إلى JobFinder.ma.\n\nشاهدهم هنا: {link}"),
+    },
     "reset": {
         "en": ("Reset your password", "Hello {name},\n\nChoose a new password here:\n{link}\n\nThis link expires in 1 hour. If you didn't ask for it, ignore this email."),
         "fr": ("Réinitialisez votre mot de passe", "Bonjour {name},\n\nChoisissez un nouveau mot de passe ici :\n{link}\n\nCe lien expire dans 1 heure. Si vous n'avez rien demandé, ignorez cet e-mail."),

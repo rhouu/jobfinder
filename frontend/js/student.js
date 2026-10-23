@@ -160,13 +160,14 @@ function openApplication(a) {
     title: a.job.title,
     body: `
       <div class="row" style="margin-bottom:18px">${companyLogo(a.job.company)}<div class="grow"><strong>${esc(a.job.company.name)}</strong><div class="muted small">${esc(a.job.city)} · ${t("apps.appliedOn", { date: dateStr(a.created_at) })}</div></div>${statusBadge(a.status)}</div>
+      ${a.job.company.external ? `<p class="notice small" style="margin-bottom:16px">${icon("clock", 15)} ${t("apps.waitingCompany", { company: a.job.company.name })}</p>` : ""}
       <div class="row" style="gap:6px;margin-bottom:20px;flex-wrap:nowrap">${steps.map((s, i) => `<div class="grow"><div class="progress" style="height:6px"><i style="width:${i <= reached ? 100 : 0}%"></i></div><small class="muted">${t("status." + s)}</small></div>`).join("")}</div>
       ${a.interview ? interviewCard({ ...a.interview, application_id: a.id }, t("iv.title")) : ""}
       <div class="row" style="margin:16px 0">${ring(Math.round(a.match_score))}<span class="muted">${t("apps.matchWhen")}</span></div>
       ${a.cover_letter ? `<h4 style="margin-bottom:8px">${t("job.cover")}</h4><p class="muted small" style="white-space:pre-line">${esc(a.cover_letter)}</p>` : ""}`,
     footer: `${["accepted", "rejected"].includes(a.status) ? "" : `<button class="btn btn-danger" id="withdraw">${t("apps.withdraw")}</button>`}
       ${a.can_review ? `<button class="btn btn-gold" id="reviewBtn">${icon("star", 15)} ${t("reviews.write")}</button>` : ""}
-      <a class="btn btn-ghost" href="#messages/${a.id}" data-close>${icon("chat", 15)} ${t("apps.message")}</a>
+      ${a.job.company.external ? "" : `<a class="btn btn-ghost" href="#messages/${a.id}" data-close>${icon("chat", 15)} ${t("apps.message")}</a>`}
       <a class="btn btn-ghost" href="/job.html?id=${a.job.id}">${t("apps.viewOffer")}</a>`,
     onOpen: (el, close) => {
       animateRings(el);

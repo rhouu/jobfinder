@@ -51,6 +51,7 @@ const emptyChart = (text) => `<div class="chart-empty">${icon("chart", 28)}<p>${
 function todoList(tot, aiOn) {
   const items = [
     { n: tot.pending_verifications, key: "adm.todoPending", href: "#companies", ic: "shield" },
+    { n: tot.waiting_apps, key: "adm.todoWaiting", href: "#jobs", ic: "clock" },
     { n: tot.new_reviews_week, key: "adm.todoReviews", href: "#reviews", ic: "star" },
     { n: tot.unverified_emails, key: "adm.todoEmails", href: "#users", ic: "mail" },
   ].filter((i) => i.n > 0);
