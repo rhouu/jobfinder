@@ -1,0 +1,44 @@
+# Render blueprint: one web service (FastAPI) + one PostgreSQL database.
+# On render.com: New > Blueprint > pick this repository. Render asks for the values marked "sync: false".
+services:
+  - type: web
+    name: jobfinder
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/stats
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jobfinder-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD        # 10+ characters, the site refuses to start otherwise
+        sync: false
+      - key: SITE_URL              # e.g. https://jobfinder.onrender.com (used in email links)
+        sync: false
+      - key: GEMINI_API_KEY        # optional
+        sync: false
+      - key: GOOGLE_CLIENT_ID      # optional
+        sync: false
+      - key: SMTP_HOST             # optional, for real emails
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_SENDER
+        sync: false
+
+databases:
+  - name: jobfinder-db
+    plan: free
+    databaseName: jobfinder

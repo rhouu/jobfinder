@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JobFinder.ma — Jobs, Internships & PFE in Morocco</title>
+  <meta name="description" content="Find jobs, internships and PFE opportunities across Morocco.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Nunito+Sans:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/i18n.js"></script>
+</head>
+<body data-page="home">
+  <main>
+    <!-- Search -->
+    <!-- Background photo: Brooke Cagle on Unsplash -->
+    <section class="hero photo-bg" style="--photo:url('https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1800&q=65')">
+      <div class="container hero-inner">
+        <span class="eyebrow" id="heroBadge" data-i18n="home.badge"></span>
+        <h1 data-i18n="home.title"></h1>
+        <p class="lead" data-i18n="home.lead"></p>
+        <form class="search-bar" id="heroSearch" role="search">
+          <div class="input-icon"><i data-icon="search"></i><input class="input" name="q" data-i18n-ph="home.searchPh"></div>
+          <select class="select" name="city"><option value="" data-i18n="common.allCities"></option></select>
+          <button class="btn btn-primary" type="submit" data-i18n="common.search"></button>
+        </form>
+        <div class="hero-tags">
+          <span data-i18n="home.popular"></span>
+          <a href="/jobs.html?type=PFE">PFE</a><a href="/jobs.html?q=Python">Python</a><a href="/jobs.html?q=Data">Data</a>
+          <a href="/jobs.html?mode=Remote" data-i18n="mode.Remote"></a><a href="/jobs.html?q=Marketing">Marketing</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Numbers -->
+    <section class="container">
+      <div class="stats-row">
+        <div class="card stat-big"><div class="num" data-count="jobs">0</div><div class="label" data-i18n="home.statJobs"></div></div>
+        <div class="card stat-big"><div class="num" data-count="internships">0</div><div class="label" data-i18n="nav.internships"></div></div>
+        <div class="card stat-big"><div class="num" data-count="companies">0</div><div class="label" data-i18n="home.statCompanies"></div></div>
+        <div class="card stat-big"><div class="num" data-count="students">0</div><div class="label" data-i18n="home.statStudents"></div></div>
+      </div>
+    </section>
+
+    <!-- Categories -->
+    <section class="section">
+      <div class="container">
+        <div class="section-head reveal"><span class="eyebrow" data-i18n="home.explore"></span><h2 data-i18n-html="home.exploreTitle"></h2></div>
+        <div class="cat-grid" id="catGrid"></div>
+      </div>
+    </section>
+
+    <!-- Latest offers -->
+    <section class="section" style="padding-top:0">
+      <div class="container">
+        <div class="toolbar reveal"><h2 style="font-size:clamp(1.4rem,3vw,1.9rem)" data-i18n="home.latest"></h2>
+          <a href="/jobs.html" class="btn btn-ghost"><span data-i18n="home.viewAll"></span> <i data-icon="arrow" data-size="16"></i></a></div>
+        <div class="job-grid" id="latestJobs"><div class="skeleton" style="height:220px"></div><div class="skeleton" style="height:220px"></div><div class="skeleton" style="height:220px"></div></div>
+      </div>
+    </section>
+
+    <!-- Companies -->
+    <section class="section" id="companies" style="padding-top:0">
+      <div class="container">
+        <div class="section-head reveal"><span class="eyebrow" data-i18n="home.trusted"></span><h2 data-i18n-html="home.companiesTitle"></h2><p data-i18n="home.companiesSub"></p></div>
+        <div class="company-strip reveal" id="companyList"></div>
+        <div class="row reveal" style="justify-content:center;margin-top:24px"><a class="btn btn-ghost" href="/companies.html"><span data-i18n="home.allCompanies"></span> <i data-icon="arrow" data-size="16"></i></a></div>
+      </div>
+    </section>
+
+    <!-- Tools -->
+    <section class="section" id="features" style="padding-top:0">
+      <div class="container">
+        <div class="section-head reveal"><span class="eyebrow" data-i18n="home.copilot"></span><h2 data-i18n-html="home.featuresTitle"></h2><p data-i18n="home.featuresSub"></p></div>
+        <div class="feature-grid">
+          <div class="card feature reveal"><div class="f-icon"><i data-icon="file" data-size="22"></i></div><h3 data-i18n="home.f1"></h3><p data-i18n="home.f1d"></p></div>
+          <div class="card feature reveal" style="--d:.05s"><div class="f-icon"><i data-icon="chat" data-size="22"></i></div><h3 data-i18n="home.f2"></h3><p data-i18n="home.f2d"></p></div>
+          <div class="card feature reveal" style="--d:.1s"><div class="f-icon"><i data-icon="target" data-size="22"></i></div><h3 data-i18n="home.f3"></h3><p data-i18n="home.f3d"></p></div>
+          <div class="card feature reveal"><div class="f-icon"><i data-icon="mic" data-size="22"></i></div><h3 data-i18n="home.f4"></h3><p data-i18n="home.f4d"></p></div>
+          <div class="card feature reveal" style="--d:.05s"><div class="f-icon"><i data-icon="upload" data-size="22"></i></div><h3 data-i18n="home.f6"></h3><p data-i18n="home.f6d"></p></div>
+          <div class="card feature reveal" style="--d:.1s"><div class="f-icon"><i data-icon="bell" data-size="22"></i></div><h3 data-i18n="home.f8"></h3><p data-i18n="home.f8d"></p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section" style="padding-top:0">
+      <div class="container">
+        <div class="section-head reveal"><span class="eyebrow" data-i18n="home.how"></span><h2 data-i18n-html="home.howTitle"></h2></div>
+        <div class="steps">
+          <div class="card step reveal"><h3 data-i18n="home.s1"></h3><p data-i18n="home.s1d"></p></div>
+          <div class="card step reveal" style="--d:.05s"><h3 data-i18n="home.s2"></h3><p data-i18n="home.s2d"></p></div>
+          <div class="card step reveal" style="--d:.1s"><h3 data-i18n="home.s3"></h3><p data-i18n="home.s3d"></p></div>
+          <div class="card step reveal" style="--d:.15s"><h3 data-i18n="home.s4"></h3><p data-i18n="home.s4d"></p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Employers -->
+    <section class="section" style="padding-top:0">
+      <div class="container">
+        <div class="card split reveal" style="padding:36px">
+          <div>
+            <span class="eyebrow" data-i18n="nav.employers"></span>
+            <h2 style="font-size:clamp(1.5rem,3vw,2rem)" data-i18n-html="home.empTitle"></h2>
+            <a href="/auth.html?mode=register&role=company" class="btn btn-primary" style="margin-top:20px" data-i18n="home.empBtn"></a>
+          </div>
+          <ul class="check-list"><li data-i18n="home.e1"></li><li data-i18n="home.e2"></li><li data-i18n="home.e3"></li><li data-i18n="home.e4"></li></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Call to action -->
+    <section class="section" style="padding-top:0">
+      <div class="container">
+        <div class="cta-box reveal">
+          <h2 data-i18n-html="home.ctaTitle"></h2>
+          <p class="muted" style="max-width:520px;margin:0 auto 22px" data-i18n="home.ctaSub"></p>
+          <div class="row" style="justify-content:center">
+            <a href="/auth.html?mode=register" class="btn btn-primary btn-lg" data-i18n="home.ctaBtn"></a>
+            <a href="/jobs.html" class="btn btn-ghost btn-lg" data-i18n="nav.jobs"></a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <!-- Animation libraries: GSAP (+ScrollTrigger, SplitText). Lenis smooth scrolling is loaded by app.js. If they fail to load, the site still works. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/ScrollTrigger.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/SplitText.min.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/public.js"></script>
+</body>
+</html>

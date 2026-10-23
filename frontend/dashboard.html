@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard — JobFinder.ma</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Nunito+Sans:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/i18n.js"></script>
+</head>
+<body>
+  <div class="dash">
+    <aside class="sidebar">
+      <div class="s-label" data-i18n="side.career"></div>
+      <button class="side-link" data-panel="overview"><i data-icon="grid"></i> <span data-i18n="side.overview"></span></button>
+      <button class="side-link" data-panel="profile"><i data-icon="user"></i> <span data-i18n="side.profile"></span></button>
+      <button class="side-link" data-panel="applications"><i data-icon="briefcase"></i> <span data-i18n="nav.applications"></span> <span class="count" id="appCount">0</span></button>
+      <button class="side-link" data-panel="messages"><i data-icon="chat"></i> <span data-i18n="nav.messages"></span></button>
+      <button class="side-link" data-panel="saved"><i data-icon="bookmark"></i> <span data-i18n="side.saved"></span></button>
+      <div class="s-label" data-i18n="nav.ai"></div>
+      <button class="side-link" data-panel="cv"><i data-icon="file"></i> <span data-i18n="side.cv"></span></button>
+      <button class="side-link" data-panel="interview"><i data-icon="mic"></i> <span data-i18n="side.interview"></span></button>
+      <button class="side-link" data-panel="portfolio"><i data-icon="globe"></i> <span data-i18n="side.portfolio"></span></button>
+      <a class="side-link" href="/jobs.html"><i data-icon="search"></i> <span data-i18n="nav.jobs"></span></a>
+      <div class="side-card">
+        <strong data-i18n="side.strength"></strong>
+        <div class="progress" style="margin:10px 0 6px"><i id="sideProgress"></i></div>
+        <span class="muted" id="sideProgressLabel"></span>
+      </div>
+    </aside>
+
+    <main class="dash-main">
+      <div id="verifyBanner"></div>
+
+      <!-- Overview -->
+      <section class="panel" id="panel-overview">
+        <div class="dash-head">
+          <div><p class="muted" id="greetDate"></p><h1 id="greet"></h1></div>
+          <a href="/jobs.html" class="btn btn-primary" data-i18n="dash.findOffers"></a>
+        </div>
+        <div class="kpis">
+          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="nav.applications"></span><span class="k-icon" style="--kc:#5b8def"><i data-icon="mail"></i></span></div><div class="k-val" id="kApps">0</div></div>
+          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="dash.interviews"></span><span class="k-icon" style="--kc:#9b7ede"><i data-icon="calendar"></i></span></div><div class="k-val" id="kInterviews">0</div></div>
+          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="dash.accepted"></span><span class="k-icon" style="--kc:#2e9e74"><i data-icon="award"></i></span></div><div class="k-val" id="kAccepted">0</div></div>
+          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="side.saved"></span><span class="k-icon" style="--kc:#f2a33a"><i data-icon="bookmark"></i></span></div><div class="k-val" id="kSaved">0</div></div>
+        </div>
+        <div class="grid-3-1">
+          <div class="stack">
+            <div class="card" id="interviewsCard" hidden><div class="card-title"><h3 data-i18n="dash.upcoming"></h3></div><div id="interviews"></div></div>
+            <div class="card"><div class="card-title"><h3 data-i18n="dash.matches"></h3><a href="/jobs.html?sort=match" class="btn btn-ghost btn-sm" data-i18n="common.seeAll"></a></div><div id="matches"></div></div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <div class="card-title"><h3 data-i18n="side.strength"></h3><span class="badge" id="completionBadge">0%</span></div>
+              <div class="progress"><i id="completionBar"></i></div>
+              <p class="muted small" style="margin-top:12px" id="completionTip"></p>
+              <button class="btn btn-ghost btn-sm" data-go="profile" style="margin-top:12px" data-i18n="dash.complete"></button>
+            </div>
+            <div class="card" id="gapsCard" hidden><h3 style="margin-bottom:4px" data-i18n="learn.title"></h3><p class="muted small" data-i18n="learn.subDash"></p><div id="gaps"></div></div>
+            <div class="card"><h3 style="margin-bottom:14px" data-i18n="dash.pipeline"></h3><div class="bar-chart" id="pipelineChart"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Profile -->
+      <section class="panel" id="panel-profile">
+        <div class="dash-head"><div><h1 data-i18n="side.profile"></h1><p class="muted" data-i18n="profile.sub"></p></div>
+          <button class="btn btn-primary" id="saveProfile" data-i18n="profile.save"></button></div>
+        <label class="drop-zone" id="dropZone">
+          <input type="file" id="cvFile" accept="application/pdf">
+          <span class="k-icon kpi-icon" style="--kc:#9b7ede"><i data-icon="upload"></i></span>
+          <span class="grow"><strong data-i18n="upload.title"></strong><span class="muted small" style="display:block" data-i18n="upload.sub"></span></span>
+          <span class="btn btn-ghost btn-sm" data-i18n="upload.btn"></span>
+        </label>
+        <form id="profileForm" class="grid-2" style="align-items:start" onsubmit="return false">
+          <div class="card">
+            <h3 style="margin-bottom:18px" data-i18n="profile.personal"></h3>
+            <div class="form-grid">
+              <div class="field"><label data-i18n="auth.name"></label><input class="input" name="name"></div>
+              <div class="field"><label data-i18n="profile.phone"></label><input class="input" name="phone" placeholder="+212 6…"></div>
+              <div class="field full"><label data-i18n="profile.headline"></label><input class="input" name="headline" data-i18n-ph="profile.headlinePh"></div>
+              <div class="field"><label data-i18n="jobs.city"></label><select class="select" name="city"><option value="">—</option></select></div>
+              <div class="field"><label data-i18n="jobs.level"></label><select class="select" name="level"><option value="">—</option><option>Bac+1</option><option>Bac+2</option><option>Bac+3</option><option>Bac+4</option><option>Bac+5</option><option>Doctorat</option></select></div>
+              <div class="field"><label data-i18n="profile.school"></label><input class="input" name="school" placeholder="ENSIAS, EMI, ENCG…"></div>
+              <div class="field"><label data-i18n="profile.field"></label><input class="input" name="field"></div>
+              <div class="field full"><label data-i18n="profile.bio"></label><textarea class="textarea" name="bio"></textarea></div>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3 style="margin-bottom:18px" data-i18n="profile.skillsTitle"></h3>
+              <div class="field" style="margin-bottom:16px"><label data-i18n="job.skills"></label><div id="skillsInput"></div></div>
+              <div class="field" style="margin-bottom:16px"><label data-i18n="profile.languages"></label><div id="langInput"></div></div>
+              <div class="field"><label data-i18n="profile.lookingFor"></label><div class="checkbox-row" id="desiredTypes"></div></div>
+            </div>
+            <div class="card">
+              <h3 style="margin-bottom:18px" data-i18n="profile.links"></h3>
+              <div class="form-grid" style="grid-template-columns:1fr">
+                <div class="field"><label>LinkedIn</label><input class="input" name="linkedin" type="url" placeholder="https://linkedin.com/in/…"></div>
+                <div class="field"><label>GitHub</label><input class="input" name="github" type="url" placeholder="https://github.com/…"></div>
+                <div class="field"><label data-i18n="profile.website"></label><input class="input" name="website" type="url" placeholder="https://…"></div>
+              </div>
+            </div>
+          </div>
+          <div class="card"><div class="card-title"><h3 data-i18n="profile.education"></h3><button class="btn btn-ghost btn-sm" type="button" data-add="education" data-i18n="common.add"></button></div><div id="rep-education"></div></div>
+          <div class="card"><div class="card-title"><h3 data-i18n="profile.experience"></h3><button class="btn btn-ghost btn-sm" type="button" data-add="experience" data-i18n="common.add"></button></div><div id="rep-experience"></div></div>
+          <div class="card" style="grid-column:1/-1"><div class="card-title"><h3 data-i18n="profile.projects"></h3><button class="btn btn-ghost btn-sm" type="button" data-add="projects" data-i18n="common.add"></button></div><div id="rep-projects" class="grid-2" style="gap:12px"></div></div>
+        </form>
+      </section>
+
+      <!-- Applications -->
+      <section class="panel" id="panel-applications">
+        <div class="dash-head"><div><h1 data-i18n="nav.applications"></h1><p class="muted" data-i18n="apps.sub"></p></div></div>
+        <div class="kanban" id="kanban"></div>
+      </section>
+
+      <!-- Messages -->
+      <section class="panel" id="panel-messages">
+        <div class="dash-head"><div><h1 data-i18n="nav.messages"></h1><p class="muted" data-i18n="msg.subStudent"></p></div></div>
+        <div class="inbox" id="inbox"></div>
+      </section>
+
+      <!-- Saved -->
+      <section class="panel" id="panel-saved">
+        <div class="dash-head"><div><h1 data-i18n="side.saved"></h1></div></div>
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-title"><h3><i data-icon="bell" data-size="17"></i> <span data-i18n="alerts.title"></span></h3>
+            <a class="btn btn-ghost btn-sm" href="/jobs.html" data-i18n="alerts.new"></a></div>
+          <p class="muted small" style="margin-bottom:8px" data-i18n="alerts.sub"></p>
+          <div id="alertsList"></div>
+        </div>
+        <div class="job-grid" id="savedGrid"></div>
+      </section>
+
+      <!-- CV builder -->
+      <section class="panel" id="panel-cv">
+        <div class="dash-head"><div><h1 data-i18n="side.cv"></h1><p class="muted" data-i18n="cv.sub"></p></div></div>
+        <div class="ai-banner"><div class="ai-icon"><i data-icon="spark"></i></div><div><strong data-i18n="home.copilot"></strong><div class="muted small aiStatus"></div></div></div>
+        <div class="card" style="margin-bottom:18px">
+          <div class="form-grid" style="grid-template-columns:2fr 1fr auto;align-items:end">
+            <div class="field"><label data-i18n="cv.tailor"></label><select class="select jobPicker" id="cvJob"><option value="" data-i18n="cv.general"></option></select></div>
+            <div class="field"><label data-i18n="nav.language"></label><select class="select" id="cvLang"><option value="en">English</option><option value="fr">Français</option><option value="ar">العربية</option></select></div>
+            <button class="btn btn-primary" id="genCv"><i data-icon="spark" data-size="16"></i> <span data-i18n="cv.generate"></span></button>
+          </div>
+        </div>
+        <div class="doc-toolbar hidden" id="cvTools"><button class="btn btn-ghost btn-sm" onclick="window.print()"><i data-icon="upload" data-size="15"></i> <span data-i18n="cv.pdf"></span></button><span class="muted small" data-i18n="cv.pdfTip"></span></div>
+        <div id="cvPreview"></div>
+      </section>
+
+      <!-- Mock interview -->
+      <section class="panel" id="panel-interview">
+        <div class="dash-head"><div><h1 data-i18n="side.interview"></h1><p class="muted" data-i18n="mock.sub"></p></div></div>
+        <div class="ai-banner"><div class="ai-icon"><i data-icon="mic"></i></div><div><strong data-i18n="side.interview"></strong><div class="muted small aiStatus"></div></div></div>
+        <div class="card" style="margin-bottom:18px">
+          <div class="form-grid" style="grid-template-columns:1fr auto;align-items:end">
+            <div class="field"><label data-i18n="mock.pick"></label><select class="select jobPicker" id="mockJob"><option value="" data-i18n="mock.choose"></option></select></div>
+            <button class="btn btn-primary" id="startMock"><i data-icon="mic" data-size="16"></i> <span data-i18n="mock.start"></span></button>
+          </div>
+        </div>
+        <div id="mockArea"></div>
+      </section>
+
+      <!-- Portfolio -->
+      <section class="panel" id="panel-portfolio">
+        <div class="dash-head"><div><h1 data-i18n="side.portfolio"></h1><p class="muted" data-i18n="pf.sub"></p></div>
+          <button class="btn btn-primary" id="genPf"><i data-icon="spark" data-size="16"></i> <span data-i18n="pf.generate"></span></button></div>
+        <div class="card row" style="margin-bottom:18px;gap:24px">
+          <div><div class="muted small" style="margin-bottom:6px" data-i18n="pf.theme"></div><div class="theme-swatches" id="themes"></div></div>
+          <label class="row" style="cursor:pointer"><span class="switch"><input type="checkbox" id="pfPublic"><span></span></span><span data-i18n="pf.public"></span></label>
+          <div id="pfLink" class="muted small"></div>
+        </div>
+        <div id="pfPreview"></div>
+      </section>
+    </main>
+  </div>
+  <!-- Animation libraries: GSAP (+ScrollTrigger, SplitText). Lenis smooth scrolling is loaded by app.js. If they fail to load, the site still works. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/ScrollTrigger.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/SplitText.min.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/student.js"></script>
+</body>
+</html>

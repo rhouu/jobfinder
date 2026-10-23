@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Company — JobFinder.ma</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Nunito+Sans:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/i18n.js"></script>
+</head>
+<body>
+  <div class="dash">
+    <aside class="sidebar">
+      <div class="s-label" data-i18n="side.recruiting"></div>
+      <button class="side-link" data-panel="overview"><i data-icon="grid"></i> <span data-i18n="side.overview"></span></button>
+      <button class="side-link" data-panel="jobs"><i data-icon="briefcase"></i> <span data-i18n="nav.offers"></span></button>
+      <button class="side-link" data-panel="applicants"><i data-icon="users"></i> <span data-i18n="nav.applicants"></span></button>
+      <button class="side-link" data-panel="messages"><i data-icon="chat"></i> <span data-i18n="nav.messages"></span></button>
+      <div class="s-label" data-i18n="auth.company"></div>
+      <button class="side-link" data-panel="profile"><i data-icon="building"></i> <span data-i18n="side.companyProfile"></span></button>
+      <div class="side-card" id="verifyCard"></div>
+    </aside>
+    <main class="dash-main">
+      <section class="panel" id="panel-overview">
+        <div class="dash-head">
+          <div class="row" style="gap:16px"><div id="coLogo"></div><div><p class="muted" data-i18n="co.dashboard"></p><h1 id="coName"></h1><div id="coRating" class="small"></div></div></div>
+          <button class="btn btn-primary" data-new-job><i data-icon="plus" data-size="16"></i> <span data-i18n="co.publish"></span></button>
+        </div>
+        <div id="verifyBanner"></div>
+        <div class="kpis">
+          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="co.openOffers"></span><span class="k-icon" style="--kc:#2e9e74"><i data-icon="briefcase"></i></span></div><div class="k-val" id="kOpen">0</div></div>
+          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="nav.applications"></span><span class="k-icon" style="--kc:#5b8def"><i data-icon="mail"></i></span></div><div class="k-val" id="kApps">0</div></div>
+          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="co.views"></span><span class="k-icon" style="--kc:#f2a33a"><i data-icon="eye"></i></span></div><div class="k-val" id="kViews">0</div></div>
+          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="co.avgMatch"></span><span class="k-icon" style="--kc:#9b7ede"><i data-icon="target"></i></span></div><div class="k-val" id="kMatch" data-suffix="%">0</div></div>
+        </div>
+        <div class="grid-3-1">
+          <div class="card"><div class="card-title"><h3 data-i18n="co.recent"></h3><button class="btn btn-ghost btn-sm" data-go="applicants" data-i18n="co.viewPipeline"></button></div><div id="recentApps"></div></div>
+          <div class="stack">
+            <div class="card"><h3 style="margin-bottom:14px" data-i18n="dash.upcoming"></h3><div id="coInterviews"></div></div>
+            <div class="card"><h3 style="margin-bottom:14px" data-i18n="co.funnel"></h3><div class="bar-chart" id="funnel"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-jobs">
+        <div class="dash-head"><div><h1 data-i18n="nav.offers"></h1><p class="muted" data-i18n="co.jobsSub"></p></div><button class="btn btn-primary" data-new-job><i data-icon="plus" data-size="16"></i> <span data-i18n="co.newOffer"></span></button></div>
+        <div class="table-wrap"><table><thead><tr><th data-i18n="co.offer"></th><th data-i18n="jobs.type"></th><th data-i18n="jobs.city"></th><th data-i18n="nav.applicants"></th><th data-i18n="co.viewsShort"></th><th data-i18n="co.status"></th><th></th></tr></thead><tbody id="jobsTable"></tbody></table></div>
+      </section>
+
+      <section class="panel" id="panel-applicants">
+        <div class="dash-head"><div><h1 data-i18n="nav.applicants"></h1><p class="muted" data-i18n="co.dragHint"></p></div>
+          <select class="select" id="jobFilter" style="width:auto;min-width:240px"><option value="" data-i18n="co.allOffers"></option></select></div>
+        <div class="kanban" id="pipeline"></div>
+      </section>
+
+      <section class="panel" id="panel-messages">
+        <div class="dash-head"><div><h1 data-i18n="nav.messages"></h1><p class="muted" data-i18n="msg.subCompany"></p></div></div>
+        <div class="inbox" id="inbox"></div>
+      </section>
+
+      <section class="panel" id="panel-profile">
+        <div class="dash-head"><div><h1 data-i18n="side.companyProfile"></h1><p class="muted" data-i18n="co.profileSub"></p></div><button class="btn btn-primary" id="saveCo" data-i18n="profile.save"></button></div>
+        <div class="grid-3-1" style="align-items:start">
+          <form class="card form-grid" id="coForm" onsubmit="return false">
+            <div class="field"><label data-i18n="auth.companyName"></label><input class="input" name="name"></div>
+            <div class="field"><label data-i18n="co.sector"></label><input class="input" name="sector"></div>
+            <div class="field"><label data-i18n="jobs.city"></label><select class="select" name="city"><option value="">—</option></select></div>
+            <div class="field"><label data-i18n="co.size"></label><select class="select" name="size"><option value="">—</option><option>1-10</option><option>10-50</option><option>50-200</option><option>200-500</option><option>500+</option></select></div>
+            <div class="field"><label data-i18n="profile.website"></label><input class="input" name="website" type="url" placeholder="https://"></div>
+            <div class="field"><label data-i18n="co.color"></label><input class="input" name="logo_color" type="color" style="height:48px;padding:6px"></div>
+            <div class="field full"><label data-i18n="co.description"></label><textarea class="textarea" name="description" rows="5"></textarea></div>
+          </form>
+          <div class="stack"><div class="card" id="logoBox"></div><div class="card" id="verifyBox"></div><div class="card" id="reviewsBox"></div></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <!-- Animation libraries: GSAP (+ScrollTrigger, SplitText). Lenis smooth scrolling is loaded by app.js. If they fail to load, the site still works. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/ScrollTrigger.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/SplitText.min.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/company.js"></script>
+</body>
+</html>

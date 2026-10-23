@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — JobFinder.ma</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Nunito+Sans:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/i18n.js"></script>
+</head>
+<body data-page="auth">
+  <!-- Background photo for the whole page: Vitaly Gariev on Unsplash -->
+  <main class="auth-wrap photo-bg" style="--photo:url('https://images.unsplash.com/photo-1758270705290-62b6294dd044?auto=format&fit=crop&w=1920&q=65')">
+    <section class="auth-side">
+      <span class="eyebrow fade-up"><span class="dot"></span> <span data-i18n="home.copilot"></span></span>
+      <h2 class="fade-up" style="--d:.1s" data-i18n-html="auth.sideTitle"></h2>
+      <p class="muted fade-up" style="--d:.2s;max-width:440px;font-size:1.05rem" data-i18n="auth.sideSub"></p>
+      <ul class="check-list fade-up" style="--d:.3s"><li data-i18n="auth.p1"></li><li data-i18n="auth.p2"></li><li data-i18n="auth.p3"></li></ul>
+    </section>
+
+    <section class="auth-form-wrap">
+      <!-- Sign in / register -->
+      <div class="auth-card card fade-up" id="mainCard" style="--d:.15s">
+        <div class="tabs" role="tablist"><span class="indicator"></span>
+          <button type="button" data-tab="login" class="active" data-i18n="nav.signin"></button>
+          <button type="button" data-tab="register" data-i18n="auth.create"></button>
+        </div>
+        <div id="roleWrap" class="hidden" style="margin-bottom:18px">
+          <div class="role-pick">
+            <label><input type="radio" name="role" value="student" checked><div class="role-box"><i data-icon="user" data-size="24"></i><strong data-i18n="auth.student"></strong><div class="muted small" data-i18n="auth.studentSub"></div></div></label>
+            <label><input type="radio" name="role" value="company"><div class="role-box"><i data-icon="building" data-size="24"></i><strong data-i18n="auth.company"></strong><div class="muted small" data-i18n="auth.companySub"></div></div></label>
+          </div>
+        </div>
+        <div id="googleWrap" class="hidden"><div id="googleBtn" style="display:flex;justify-content:center;min-height:44px"></div><div class="divider" data-i18n="auth.orEmail"></div></div>
+        <form id="authForm" class="form-grid" style="grid-template-columns:1fr" novalidate>
+          <div class="field hidden" data-only="register"><label for="name" data-i18n="auth.name"></label><input class="input" id="name" name="name" autocomplete="name"></div>
+          <div class="field hidden" data-only="company"><label for="company_name" data-i18n="auth.companyName"></label><input class="input" id="company_name" name="company_name"></div>
+          <div class="field"><label for="email" data-i18n="auth.email"></label><input class="input" id="email" name="email" type="email" autocomplete="email" placeholder="you@example.ma"></div>
+          <div class="field"><label for="password" data-i18n="auth.password"></label><input class="input" id="password" name="password" type="password" autocomplete="current-password">
+            <small class="muted hidden" data-only="register" data-i18n="auth.pwHint"></small></div>
+          <button class="btn btn-primary btn-lg btn-block" type="submit" id="submitBtn"></button>
+          <button type="button" class="link-btn" id="forgotLink" data-i18n="auth.forgot"></button>
+        </form>
+      </div>
+
+      <!-- Forgot password -->
+      <form class="auth-card card hidden" id="forgotCard">
+        <h2 style="margin-bottom:8px" data-i18n="auth.forgotTitle"></h2>
+        <p class="muted" style="margin-bottom:18px" data-i18n="auth.forgotSub"></p>
+        <div class="field" style="margin-bottom:16px"><label for="fEmail" data-i18n="auth.email"></label><input class="input" id="fEmail" type="email" required></div>
+        <button class="btn btn-primary btn-block" data-i18n="auth.sendLink"></button>
+        <button type="button" class="link-btn" style="margin-top:14px" data-back data-i18n="auth.backLogin"></button>
+      </form>
+
+      <!-- New password (from the email link) -->
+      <form class="auth-card card hidden" id="resetCard">
+        <h2 style="margin-bottom:8px" data-i18n="auth.resetTitle"></h2>
+        <p class="muted" style="margin-bottom:18px" data-i18n="auth.pwHint"></p>
+        <div class="field" style="margin-bottom:16px"><label for="newPw" data-i18n="auth.newPassword"></label><input class="input" id="newPw" type="password" autocomplete="new-password" minlength="8" required></div>
+        <button class="btn btn-primary btn-block" data-i18n="auth.resetBtn"></button>
+      </form>
+
+      <!-- Email verification result -->
+      <div class="auth-card card hidden" id="verifyCard" style="text-align:center">
+        <div class="k-icon kpi-icon" style="margin:0 auto 16px;--kc:#2e9e74" id="verifyIcon"><i data-icon="mail" data-size="24"></i></div>
+        <h2 id="verifyTitle" data-i18n="common.loading"></h2>
+        <p class="muted" id="verifyText" style="margin:10px 0 20px"></p>
+        <a class="btn btn-primary" href="/auth.html" id="verifyBtn" data-i18n="auth.continue"></a>
+      </div>
+    </section>
+  </main>
+  <!-- Animation libraries: GSAP (+ScrollTrigger, SplitText). Lenis smooth scrolling is loaded by app.js. If they fail to load, the site still works. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/ScrollTrigger.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/SplitText.min.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/public.js"></script>
+</body>
+</html>

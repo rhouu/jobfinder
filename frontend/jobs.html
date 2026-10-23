@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Offers — JobFinder.ma</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Nunito+Sans:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/i18n.js"></script>
+</head>
+<body data-page="jobs">
+  <main class="container">
+    <div class="page-head">
+      <span class="eyebrow fade-up"><span class="dot"></span> <span id="countLabel" data-i18n="common.loading"></span></span>
+      <h1 class="fade-up" style="--d:.05s" id="pageTitle" data-i18n-html="jobs.title"></h1>
+      <p class="muted fade-up" style="--d:.1s" data-i18n="jobs.sub"></p>
+    </div>
+    <div class="jobs-layout">
+      <aside class="card filters fade-up" style="--d:.15s">
+        <div><h4 data-i18n="jobs.keyword"></h4><div class="input-icon"><i data-icon="search"></i><input class="input" id="fQ" data-i18n-ph="home.searchPh"></div></div>
+        <div><h4 data-i18n="jobs.city"></h4><select class="select" id="fCity"><option value="" data-i18n="common.allCities"></option></select></div>
+        <div><h4 data-i18n="jobs.type"></h4><div class="checkbox-row" id="fType"></div></div>
+        <div><h4 data-i18n="jobs.mode"></h4><div class="checkbox-row" id="fMode"></div></div>
+        <div><h4 data-i18n="jobs.level"></h4><select class="select" id="fLevel"><option value="" data-i18n="jobs.anyLevel"></option><option>Bac+2</option><option>Bac+3</option><option>Bac+5</option></select></div>
+        <button class="btn btn-ghost btn-block" id="resetBtn" data-i18n="jobs.reset"></button>
+      </aside>
+      <section>
+        <div class="toolbar">
+          <div class="muted" id="resultInfo"></div>
+          <div class="row">
+            <button class="btn btn-ghost btn-sm" id="alertBtn"><i data-icon="bell" data-size="15"></i> <span data-i18n="jobs.createAlert"></span></button>
+            <div class="view-switch" role="group">
+              <button data-view="list" class="active"><i data-icon="grid" data-size="15"></i> <span data-i18n="jobs.list"></span></button>
+              <button data-view="map"><i data-icon="pin" data-size="15"></i> <span data-i18n="jobs.map"></span></button>
+            </div>
+            <select class="select" id="sort" style="width:auto">
+              <option value="recent" data-i18n="jobs.recent"></option>
+              <option value="salary" data-i18n="jobs.salary"></option>
+              <option value="match" id="matchOpt" hidden data-i18n="jobs.best"></option>
+            </select>
+          </div>
+        </div>
+        <div class="job-grid" id="results"></div>
+        <div class="pagination" id="pagination"></div>
+        <!-- Map view (Leaflet + OpenStreetMap): one marker per city with the number of matching offers -->
+        <div class="jobs-map card hidden" id="jobsMap"></div>
+      </section>
+    </div>
+  </main>
+  <!-- Animation libraries: GSAP (+ScrollTrigger, SplitText). Lenis smooth scrolling is loaded by app.js. If they fail to load, the site still works. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/ScrollTrigger.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/SplitText.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/public.js"></script>
+</body>
+</html>
