@@ -79,7 +79,12 @@ messages, interview scheduling (the candidate gets a notification and an email),
 
 **Admins:** statistics, user moderation, company verification, offer and review moderation.
 
-**Everyone:** chatbot assistant, EN/FR/AR, light/dark mode, email verification, password reset, Google sign-in.
+**Everyone:** chatbot assistant, EN/FR/AR, light/dark mode, password reset, Google sign-in.
+
+**Sign-in:** "Continue with Google" appears on the login page once `GOOGLE_CLIENT_ID` is set (Google accounts are
+already verified). Accounts created with an email and password must type the **6-digit code** emailed to them before
+they can sign in (valid 15 minutes, 5 tries, one new code per minute). This only applies when SMTP is configured;
+without it, accounts are signed in right away as before.
 
 ## How the code is organised
 

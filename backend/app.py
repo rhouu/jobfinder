@@ -15,6 +15,7 @@ Every URL of the API lives in this file, grouped in sections:
 import base64
 import logging
 import re
+import secrets
 from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -28,7 +29,7 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from . import ai
-from .database import (FRONTEND_DIR, GOOGLE_CLIENT_ID, SITE_URL, Application, Base, Company, DirectoryCompany, Job, Message,
+from .database import (FRONTEND_DIR, GOOGLE_CLIENT_ID, SITE_URL, Application, Base, Company, DirectoryCompany, EmailCode, Job, Message,
                        Notification, Review, SpontaneousApplication,
                        SavedJob, SavedSearch, StudentProfile, User, engine, get_db, utcnow)
 from .helpers import (check_signature, current_user, guess_sector, hash_password, login_response, mail_enabled, make_token,
@@ -121,6 +122,33 @@ def _send_verification(user: User):
     send_email(user, "verify", {"link": f"/auth.html?verify={make_token(user, 'verify', 48)}"})
 
 
+# Email accounts confirm their address with a 6-digit code (only when the site can send emails).
+# Until then they can't sign in. Google accounts skip this: Google already checked the address.
+CODE_MINUTES = 15
+
+
+def _needs_code(user: User) -> bool:
+    return not user.email_verified and mail_enabled()
+
+
+def _send_code(user: User, db: Session) -> None:
+    row, now = user.email_code, utcnow()
+    if row and (now - row.sent_at).total_seconds() < 60:
+        return  # at most one email per minute
+    code = f"{secrets.randbelow(10 ** 6):06d}"
+    if not row:
+        row = user.email_code = EmailCode(user_id=user.id)
+    row.code_hash, row.attempts = sign(f"code:{user.id}:{code}"), 0
+    row.sent_at, row.expires_at = now, now + timedelta(minutes=CODE_MINUTES)
+    db.commit()
+    send_email(user, "code", {"code": code, "minutes": CODE_MINUTES})
+
+
+def _code_step(user: User, db: Session) -> dict:
+    _send_code(user, db)
+    return {"needs_code": True, "email": user.email}
+
+
 @app.post("/api/auth/register")
 def register(data: RegisterIn, db: Session = Depends(get_db)):
     if data.role not in ("student", "company"):
@@ -132,6 +160,8 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
     _new_account_records(user, data.company_name)
     db.add(user)
     db.commit()
+    if _needs_code(user):
+        return _code_step(user, db)
     _send_verification(user)
     return login_response(user)
 
@@ -148,9 +178,54 @@ def login(data: LoginIn, db: Session = Depends(get_db)):
         raise HTTPException(401, "Incorrect email or password.")
     if not user.is_active:
         raise HTTPException(403, "This account has been suspended. Contact support.")
+    if _needs_code(user):
+        return _code_step(user, db)
     user.last_login = utcnow()
     db.commit()
     return login_response(user)
+
+
+class CodeIn(BaseModel):
+    email: str
+    password: str  # asked again so that nobody can confirm (and open) an account by guessing codes
+    code: str = ""
+
+
+def _code_user(data: CodeIn, db: Session) -> User:
+    user = db.scalar(select(User).where(User.email == data.email.strip().lower()))
+    if not user or not verify_password(data.password, user.password_hash):
+        raise HTTPException(401, "Incorrect email or password.")
+    if not user.is_active:
+        raise HTTPException(403, "This account has been suspended. Contact support.")
+    return user
+
+
+@app.post("/api/auth/verify-code")
+def verify_code(data: CodeIn, db: Session = Depends(get_db)):
+    user = _code_user(data, db)
+    if user.email_verified:
+        return login_response(user)
+    row = user.email_code
+    if not row or row.expires_at < utcnow():
+        raise HTTPException(400, "This code has expired. Ask for a new one.")
+    if row.attempts >= 5:
+        raise HTTPException(400, "Too many wrong codes. Ask for a new one.")
+    if not check_signature(f"code:{user.id}:{data.code.strip()}", row.code_hash):
+        row.attempts += 1
+        db.commit()
+        raise HTTPException(400, f"Wrong code. {5 - row.attempts} tries left.")
+    user.email_verified, user.last_login = True, utcnow()
+    db.delete(row)
+    db.commit()
+    return login_response(user)
+
+
+@app.post("/api/auth/resend-code")
+def resend_code(data: CodeIn, db: Session = Depends(get_db)):
+    user = _code_user(data, db)
+    if _needs_code(user):
+        _send_code(user, db)
+    return {"ok": True}
 
 
 class GoogleIn(BaseModel):

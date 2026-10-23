@@ -199,6 +199,11 @@ EMAILS = {  # kind -> language -> (subject, body). {placeholders} come from `dat
         "fr": ("Votre candidature a été envoyée à {company}", "Bonjour {name},\n\nVotre candidature et votre CV ont été envoyés par e-mail à {company}. S'ils répondent, la réponse arrivera dans cette boîte mail.\n\nVotre message :\n{message}\n\nToutes vos candidatures : {link}"),
         "ar": ("تم إرسال طلبك إلى {company}", "مرحبًا {name}،\n\nتم إرسال طلبك وسيرتك الذاتية بالبريد إلى {company}. إذا ردّوا، سيصل الرد إلى هذا البريد.\n\nرسالتك:\n{message}\n\nكل طلباتك: {link}"),
     },
+    "code": {
+        "en": ("Your JobFinder code: {code}", "Hello {name},\n\nYour confirmation code is:\n\n    {code}\n\nEnter it on JobFinder.ma to confirm your email address. It expires in {minutes} minutes.\nIf you didn't create an account, ignore this email."),
+        "fr": ("Votre code JobFinder : {code}", "Bonjour {name},\n\nVotre code de confirmation est :\n\n    {code}\n\nSaisissez-le sur JobFinder.ma pour confirmer votre adresse e-mail. Il expire dans {minutes} minutes.\nSi vous n'avez pas créé de compte, ignorez cet e-mail."),
+        "ar": ("رمز JobFinder الخاص بك: {code}", "مرحبًا {name}،\n\nرمز التأكيد الخاص بك هو:\n\n    {code}\n\nأدخله في JobFinder.ma لتأكيد بريدك الإلكتروني. تنتهي صلاحيته خلال {minutes} دقيقة.\nإذا لم تنشئ حسابًا، تجاهل هذه الرسالة."),
+    },
     "reset": {
         "en": ("Reset your password", "Hello {name},\n\nChoose a new password here:\n{link}\n\nThis link expires in 1 hour. If you didn't ask for it, ignore this email."),
         "fr": ("Réinitialisez votre mot de passe", "Bonjour {name},\n\nChoisissez un nouveau mot de passe ici :\n{link}\n\nCe lien expire dans 1 heure. Si vous n'avez rien demandé, ignorez cet e-mail."),

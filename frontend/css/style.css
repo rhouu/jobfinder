@@ -655,3 +655,7 @@ a.todo-item:hover { background: var(--primary-soft); }
 /* Offer from a job board: second way to apply */
 .external-apply { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); display: grid; gap: 10px; text-align: center; }
 .notice { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--primary-soft); color: var(--text); }
+
+/* 6-digit email code */
+.code-input { text-align: center; font-size: 1.8rem; font-weight: 800; letter-spacing: 0.5em; padding-inline-start: 0.5em; max-width: 280px; margin: 0 auto; display: block; font-variant-numeric: tabular-nums; }
+#codeCard .link-btn { display: block; margin-inline: auto; }

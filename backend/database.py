@@ -14,6 +14,7 @@ Tables
   saved_searches   a student's saved search: new matching offers trigger an alert
   directory        public company directory (Marrakech businesses, loaded from data/companies.csv)
   company_contacts private email of a directory company (never sent to the browser)
+  email_codes      6-digit code emailed to confirm a new account's address
   spontaneous_applications  a student's CV emailed to a directory company
 """
 import os
@@ -99,6 +100,7 @@ class User(Base):
     reviews: Mapped[list["Review"]] = relationship(back_populates="student", cascade="all, delete-orphan")
     searches: Mapped[list["SavedSearch"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     spontaneous: Mapped[list["SpontaneousApplication"]] = relationship(back_populates="student", cascade="all, delete-orphan")
+    email_code: Mapped["EmailCode | None"] = relationship(cascade="all, delete-orphan")
 
     def public(self) -> dict:
         return {"id": self.id, "email": self.email, "name": self.name, "role": self.role,
@@ -386,6 +388,17 @@ class DirectoryCompany(Base):
         return {"id": self.id, "name": self.name, "sector": self.sector, "category": self.category, "city": self.city,
                 "area": self.area, "website": self.website, "maps_url": self.maps_url, "rating": self.rating,
                 "reviews": self.reviews, "latitude": self.latitude, "longitude": self.longitude, "can_apply": self.can_apply}
+
+
+class EmailCode(Base):
+    """The last code emailed to a user to confirm their address (only a signature of it is stored)."""
+    __tablename__ = "email_codes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    sent_at: Mapped[datetime] = mapped_column(DateTime)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class CompanyContact(Base):

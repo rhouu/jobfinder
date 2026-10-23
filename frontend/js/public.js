@@ -472,10 +472,11 @@ function authPage() {
   initPage({ footer: false, chat: false });
   const p = params();
   const next = p.next && p.next.startsWith("/") && !p.next.startsWith("//") ? p.next : null;
-  const cards = ["mainCard", "forgotCard", "resetCard", "verifyCard"];
+  const cards = ["mainCard", "forgotCard", "resetCard", "verifyCard", "codeCard"];
   const showCard = (id) => cards.forEach((c) => $("#" + c).classList.toggle("hidden", c !== id));
 
   const done = (data) => {
+    if (data.needs_code) return askCode(data.email);
     Auth.save(data);
     toast(t("auth.welcome", { name: data.user.name.split(" ")[0] }, true), "success");
     setTimeout(() => location.replace(next || Auth.home(data.user.role)), 400);
@@ -538,9 +539,47 @@ function authPage() {
         done(mode === "register"
           ? await API.post("/api/auth/register", { name: f.name, email: f.email, password: f.password, role: role(), company_name: f.company_name || null, language: LANG })
           : await API.post("/api/auth/login", { email: f.email, password: f.password }));
-        if (mode === "register") toast(t("auth.checkInbox"), "info");
       } catch (err) { toast(err.message, "error"); }
     });
+  });
+
+  // Email accounts confirm their address with the 6-digit code we email them
+  let pending = null, timer = null;
+  function askCode(email) {
+    pending = { email, password: $("#password").value };
+    $("#codeText").textContent = t("code.sent", { email });
+    $("#codeInput").value = "";
+    showCard("codeCard");
+    $("#codeInput").focus();
+    countdown();
+  }
+  function countdown(seconds = 60) {
+    const btn = $("#resendCode");
+    clearInterval(timer);
+    const tick = () => {
+      btn.disabled = seconds > 0;
+      btn.textContent = seconds > 0 ? t("code.resendIn", { n: seconds }) : t("code.resend");
+      if (seconds-- <= 0) clearInterval(timer);
+    };
+    tick();
+    timer = setInterval(tick, 1000);
+  }
+  $("#codeInput").addEventListener("input", (e) => {
+    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6);
+    if (e.target.value.length === 6) $("#codeCard").requestSubmit();
+  });
+  $("#codeCard").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const code = $("#codeInput").value;
+    if (!/^\d{6}$/.test(code)) return toast(t("code.invalid"), "error");
+    withLoading($("button[type=submit], button:not([type])", e.target), async () => {
+      try { done(await API.post("/api/auth/verify-code", { ...pending, code })); }
+      catch (err) { toast(err.message, "error"); $("#codeInput").select(); }
+    });
+  });
+  $("#resendCode").addEventListener("click", async () => {
+    try { await API.post("/api/auth/resend-code", pending); toast(t("code.resent"), "success"); countdown(); }
+    catch (err) { toast(err.message, "error"); }
   });
 
   $("#forgotLink").addEventListener("click", () => { showCard("forgotCard"); $("#fEmail").value = $("#email").value; });

@@ -147,6 +147,15 @@ const T = {
   "spont.listSub": ["Applications emailed to companies from the directory. Their replies arrive in your own mailbox.", "Candidatures envoyées par e-mail aux entreprises de l'annuaire. Les réponses arrivent dans votre boîte mail.", "طلبات أُرسلت بالبريد إلى شركات الدليل. تصل الردود إلى بريدك."],
   "spont.listEmpty": ["None yet. Find companies on the Companies page and click \"Send my application\".", "Aucune pour l'instant. Trouvez des entreprises dans la page Entreprises et cliquez sur « Envoyer ma candidature ».", "لا شيء بعد. ابحث عن الشركات في صفحة الشركات واضغط \"أرسل طلبي\"."],
   "spont.findMore": ["Find companies", "Trouver des entreprises", "ابحث عن شركات"],
+  "code.title": ["Check your email", "Vérifiez vos e-mails", "تحقق من بريدك"],
+  "code.sent": ["We sent a 6-digit code to {email}. Enter it below to confirm this address is yours.", "Nous avons envoyé un code à 6 chiffres à {email}. Saisissez-le ci-dessous pour confirmer que cette adresse vous appartient.", "أرسلنا رمزًا من 6 أرقام إلى {email}. أدخله أدناه لتأكيد أن هذا البريد لك."],
+  "code.verify": ["Confirm", "Confirmer", "تأكيد"],
+  "code.spam": ["Can't find it? Check your spam folder. The code is valid for 15 minutes.", "Vous ne le trouvez pas ? Regardez dans les spams. Le code est valable 15 minutes.", "لم تجده؟ تحقق من مجلد الرسائل غير المرغوب فيها. الرمز صالح لمدة 15 دقيقة."],
+  "code.resend": ["Send a new code", "Renvoyer un code", "إرسال رمز جديد"],
+  "code.resendIn": ["New code in {n}s", "Nouveau code dans {n} s", "رمز جديد بعد {n} ث"],
+  "code.resent": ["A new code was sent", "Un nouveau code a été envoyé", "تم إرسال رمز جديد"],
+  "code.change": ["Use another email", "Utiliser une autre adresse", "استخدام بريد آخر"],
+  "code.invalid": ["Enter the 6 digits from the email.", "Saisissez les 6 chiffres reçus par e-mail.", "أدخل الأرقام الستة من الرسالة."],
   "footer.legal": ["Privacy · Terms · Contact", "Confidentialité · Conditions · Contact", "الخصوصية · الشروط · اتصل بنا"],
 
   // ---------------------------------------------------------------- chatbot
@@ -355,7 +364,6 @@ const T = {
   "auth.fillAll": ["Enter your email and password.", "Saisissez votre e-mail et votre mot de passe.", "أدخل بريدك وكلمة المرور."],
   "auth.nameMissing": ["Enter your full name.", "Saisissez votre nom complet.", "أدخل اسمك الكامل."],
   "auth.welcome": ["Welcome, {name}!", "Bienvenue, {name} !", "مرحبًا {name}!"],
-  "auth.checkInbox": ["Check your inbox to confirm your email.", "Consultez votre boîte mail pour confirmer votre adresse.", "تفقّد بريدك لتأكيد عنوانك."],
   "verify.title": ["Confirm your email", "Confirmez votre e-mail", "أكّد بريدك الإلكتروني"],
   "verify.text": ["We sent a link to {email}.", "Nous avons envoyé un lien à {email}.", "أرسلنا رابطًا إلى {email}."],
   "verify.resend": ["Send again", "Renvoyer", "إعادة الإرسال"],
