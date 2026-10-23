@@ -29,7 +29,9 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 load_dotenv(BASE_DIR / ".env")
 
 DATABASE_URL = os.getenv("DATABASE_URL") or f"sqlite:///{BASE_DIR / 'jobfinder.db'}"  # SQLite if no PostgreSQL
-DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+for prefix in ("postgres://", "postgresql://"):  # always use the psycopg 3 driver
+    if DATABASE_URL.startswith(prefix):
+        DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len(prefix):]
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me-in-production")
 SITE_URL = os.getenv("SITE_URL", "http://localhost:8000")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
