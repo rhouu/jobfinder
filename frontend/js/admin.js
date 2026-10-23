@@ -82,6 +82,8 @@ async function loadStats() {
     $("#tCompaniesSub").textContent = t("adm.verifiedPending", { v: tot.verified_companies, p: tot.pending_verifications });
     $("#tDirectory").textContent = t("adm.inDirectory", { d: fmt.format(tot.directory), e: tot.external_companies });
     $("#pendingCount").textContent = tot.pending_verifications;
+    const r = s.offers_refresh;
+    $("#refreshInfo").textContent = !r.enabled ? t("adm.refreshOff") : r.last ? t("adm.refreshLast", { when: timeAgo(r.last + "Z") }) : "";
     $("#aiBadge").className = `badge ${s.ai_enabled ? "badge-green" : "badge-gold"}`;
     $("#aiBadge").innerHTML = `${icon("spark", 14)} ${t(s.ai_enabled ? "adm.aiOn" : "adm.aiOff")}`;
 
@@ -109,6 +111,27 @@ $$("#rangeSwitch button").forEach((b) => b.addEventListener("click", () => {
   $$("#rangeSwitch button").forEach((x) => x.classList.toggle("active", x === b));
   statDays = +b.dataset.days;
   loadStats();
+}));
+
+// New offers from Jooble right now (it also runs by itself once a day)
+$("#refreshBtn").addEventListener("click", (e) => withLoading(e.currentTarget, async () => {
+  try {
+    const r = await API.post("/api/admin/refresh-offers");
+    toast(t("adm.refreshDone", { added: r.added, closed: r.closed }), "success");
+    loadStats();
+  } catch (err) { toast(err.message, "error"); }
+}));
+
+// Backup: downloads every table as one JSON file
+$("#backupBtn").addEventListener("click", (e) => withLoading(e.currentTarget, async () => {
+  try {
+    const res = await fetch("/api/admin/backup", { headers: { Authorization: `Bearer ${Auth.token()}` } });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(await res.blob()),
+      download: `jobfinder-backup-${new Date().toISOString().slice(0, 10)}.json` });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (err) { toast(err.message, "error"); }
 }));
 
 // ---------------------------------------------------------------- Users

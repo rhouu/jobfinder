@@ -23,7 +23,11 @@
     </aside>
     <main class="dash-main">
       <section class="panel" id="panel-analytics">
-        <div class="dash-head"><div><p class="muted" data-i18n="adm.administration"></p><h1 data-i18n-html="adm.title"></h1></div><span class="badge" id="aiBadge"></span></div>
+        <div class="dash-head"><div><p class="muted" data-i18n="adm.administration"></p><h1 data-i18n-html="adm.title"></h1></div>
+          <div class="row"><span class="muted small" id="refreshInfo"></span>
+            <button class="btn btn-ghost btn-sm" id="refreshBtn"><i data-icon="layers" data-size="15"></i> <span data-i18n="adm.refreshOffers"></span></button>
+            <button class="btn btn-ghost btn-sm" id="backupBtn"><i data-icon="upload" data-size="15"></i> <span data-i18n="adm.backup"></span></button>
+            <span class="badge" id="aiBadge"></span></div></div>
         <div class="kpis">
           <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="adm.totalUsers"></span><span class="k-icon" style="--kc:#5b8def"><i data-icon="users"></i></span></div><div class="k-val" id="tUsers">0</div><span class="muted small" id="tUsersSub"></span><span class="k-delta" id="tUsersWeek"></span></div>
           <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="co.openOffers"></span><span class="k-icon" style="--kc:#f2a33a"><i data-icon="briefcase"></i></span></div><div class="k-val" id="tJobs">0</div><span class="muted small" id="tJobsSub"></span><span class="k-delta" id="tJobsType"></span></div>

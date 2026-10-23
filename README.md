@@ -55,6 +55,27 @@ Spontaneous applications are the exception: they need real SMTP. With Gmail: tur
 In production (`RENDER` or `PRODUCTION` set) the site refuses to start with the default `SECRET_KEY` or admin password.
 Free Render services sleep after 15 minutes without visitors (the first visit then takes ~1 minute), and the free database expires after 30 days.
 
+## Fresh offers, Google and backups
+
+- **New offers every day.** With `JOOBLE_API_KEY` set (free key from Jooble's API page), the site asks Jooble once a day for
+  new offers in Morocco (search words in `JOOBLE_KEYWORDS`), adds the ones it doesn't have, sends job alerts for them, and
+  closes job-board offers older than `OFFER_MAX_DAYS`. Admins can also click **Refresh offers**. On a free Render service
+  that sleeps, the daily refresh runs the next time the site wakes up.
+- **Google for Jobs.** Each offer page is sent with a schema.org `JobPosting` block, so Google can show it in its job
+  search. `/sitemap.xml` lists every open offer and `/robots.txt` points to it. After going live, add the sitemap in
+  Google Search Console.
+- **Backups.** Admin dashboard > **Download backup** saves every table as one JSON file (passwords stay hashed).
+  Download one regularly and keep it somewhere safe.
+- **Privacy and terms.** `/privacy.html` and `/terms.html` (texts in `js/i18n.js`, contact email from `CONTACT_EMAIL`).
+
+### Moving the database to Neon (free, doesn't expire)
+
+Render's free PostgreSQL is deleted 30 days after creation. To move to Neon:
+1. Create a free project on neon.tech and copy its connection string.
+2. In Neon, use **Import data** with your Render database's *External Database URL* (Render > jobfinder-db > Connect).
+3. In Render > jobfinder > Environment, set `DATABASE_URL` to the Neon connection string and redeploy.
+4. Check the site, then delete `jobfinder-db` in Render.
+
 ## Features
 
 **Offers page:** list or **map view** (Leaflet + OpenStreetMap: one marker per city with the number of matching offers),
@@ -67,7 +88,7 @@ hiring right now. A company that finds itself there can click "This is my compan
 **Spontaneous applications:** 228 directory companies have a known email (kept private in `data/company_emails.csv`,
 never sent to the browser). Their card shows **Send my application**: the student writes a message, attaches a PDF CV,
 and the site emails it to the company with **Reply-To = the student's email**, so the answer lands in the student's own
-mailbox. Limits: confirmed email required, one application per company, 5 per day. Every email has a link the company
+mailbox. Students can save their CV once in their profile and reuse it. Limits: confirmed email required, one application per company, 5 per day. Every email has a link the company
 can click to stop receiving applications. Needs the `SMTP_…` settings (see below).
 
 **Students:** profile (or upload a PDF CV to fill it), offers ranked by match score, saved offers, application board,

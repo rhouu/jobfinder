@@ -27,6 +27,10 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_ID      # optional
         sync: false
+      - key: JOOBLE_API_KEY        # optional: new offers every day (free key at jooble.org/api/about)
+        sync: false
+      - key: CONTACT_EMAIL         # optional: shown on the privacy and terms pages (default: ADMIN_EMAIL)
+        sync: false
       - key: SMTP_HOST             # optional, for real emails
         sync: false
       - key: SMTP_PORT

@@ -6,16 +6,23 @@ SEED — runs on every start, but only fills empty tables (so it never duplicate
   3. data/companies.csv  the public company directory (Marrakech). Public business info only, no contacts.
   4. data/company_emails.csv  private emails of some directory companies (maps_url, email), used only to
                          send them spontaneous applications. Never shown on the site.
+
+FRESH OFFERS — refresh_offers() runs once a day (started by app.py): it asks Jooble's official API for new offers
+in Morocco, adds the ones we don't have yet, and closes job-board offers older than OFFER_MAX_DAYS.
 """
 import csv
+import html
 import logging
 import re
 import zlib
-from datetime import datetime
+from datetime import datetime, timedelta
+
+import requests
 
 from sqlalchemy import func, select
 
-from .database import ADMIN_EMAIL, ADMIN_PASSWORD, BASE_DIR, Company, CompanyContact, DirectoryCompany, Job, SessionLocal, User
+from .database import (ADMIN_EMAIL, ADMIN_PASSWORD, BASE_DIR, JOOBLE_API_KEY, JOOBLE_HOST, JOOBLE_KEYWORDS, JOOBLE_LOCATION,
+                       OFFER_MAX_DAYS, Company, CompanyContact, DirectoryCompany, Job, SessionLocal, Setting, User, utcnow)
 from .helpers import directory_sector, guess_sector, hash_password
 
 log = logging.getLogger("jobfinder.seed")
@@ -69,6 +76,22 @@ def _skills(text: str) -> list[str]:
     return [label for pattern, label in SKILLS if re.search(pattern, t)][:8]
 
 
+def clean_text(text: str) -> str:
+    """Job boards send HTML snippets and escaped characters ("& amp;", "<b>"): keep plain text."""
+    text = (text or "").replace("& amp;", "&amp;")
+    text = re.sub(r"<[^>]+>", "", re.sub(r"<br\s*/?>|</p>|</li>", " ", text, flags=re.I))
+    return re.sub(r"\s+", " ", html.unescape(text)).strip()
+
+
+def _job(company: Company, title: str, extract: str, city: str, url: str, source: str, published: datetime | None) -> Job:
+    title, extract = clean_text(title), clean_text(extract)
+    text = f"{title} {extract}"
+    return Job(company=company, title=title[:200], type=_contract(text), city=city, work_mode=_work_mode(text),
+               description=extract, skills=_skills(text), level=_level(text), status="open",
+               sector=guess_sector(f"{title} {company.name} {extract}"), source=source or "Jooble", external_url=url[:500],
+               **({"created_at": published} if published else {}))
+
+
 def import_offers(db) -> int:
     path = DATA_DIR / "offers.csv"
     if not path.exists():
@@ -82,13 +105,84 @@ def import_offers(db) -> int:
             companies[name] = Company(name=name, is_external=True, city=r["city"], logo_color=_color(name),
                                       sector=guess_sector(f"{name} {titles}"))
             db.add(companies[name])
-        text = f"{r['title']} {r['extract']}"
         published = datetime.strptime(r["published"], "%Y-%m-%d") if r["published"] else None
-        db.add(Job(company=companies[name], title=r["title"], type=_contract(text), city=r["city"], work_mode=_work_mode(text),
-                   description=r["extract"], skills=_skills(text), level=_level(text), status="open",
-                   sector=guess_sector(f"{r['title']} {name} {r['extract']}"), source=r["source"] or "Jooble",
-                   external_url=r["url"], **({"created_at": published} if published else {})))
+        db.add(_job(companies[name], r["title"], r["extract"], r["city"], r["url"], r["source"], published))
     return len(rows)
+
+
+# ---------------------------------------------------------------- fresh offers (daily)
+CITIES = ["Casablanca", "Rabat", "Marrakech", "Tanger", "Fès", "Agadir", "Meknès", "Oujda", "Kénitra", "Tétouan",
+          "Ouarzazate", "El Jadida", "Berrechid", "Mohammedia", "Salé", "Témara", "Settat", "Nador", "Safi", "Béni Mellal"]
+_PLAIN = str.maketrans("éèêëàâîïôûüç", "eeeeaaiiouuc")
+
+
+def _city(location: str) -> str:
+    plain = (location or "").lower().translate(_PLAIN)
+    for c in CITIES:
+        if c.lower().translate(_PLAIN) in plain:
+            return c
+    return (location or "Maroc").split(",")[0].strip()[:80] or "Maroc"
+
+
+def _link_key(url: str) -> str:
+    return (url or "").split("?")[0].rstrip("/").lower()  # same offer even if the tracking part of the link changes
+
+
+def fetch_jooble(keywords: str) -> list[dict]:
+    """One search on Jooble's REST API. Returns its "jobs" list ([] on any problem)."""
+    try:
+        r = requests.post(f"https://{JOOBLE_HOST}/api/{JOOBLE_API_KEY}", json={"keywords": keywords, "location": JOOBLE_LOCATION}, timeout=25)
+        r.raise_for_status()
+        return r.json().get("jobs") or []
+    except (requests.RequestException, ValueError) as exc:
+        log.warning("Jooble search %r failed: %s", keywords, exc)
+        return []
+
+
+def refresh_offers(db) -> dict:
+    """Adds new Jooble offers we don't have yet and closes job-board offers that are too old."""
+    added = []
+    if JOOBLE_API_KEY:
+        known = {_link_key(u) for u in db.scalars(select(Job.external_url).where(Job.external_url != ""))}
+        known_titles = {(t.lower(), c.lower()) for t, c in db.execute(select(Job.title, Company.name).join(Company))}
+        companies = {c.name.lower(): c for c in db.scalars(select(Company))}
+        for kw in JOOBLE_KEYWORDS:
+            for item in fetch_jooble(kw):
+                url, title = item.get("link") or "", clean_text(item.get("title"))
+                name = clean_text(item.get("company")) or "Confidentiel"
+                if not url or not title or _link_key(url) in known or (title.lower(), name.lower()) in known_titles:
+                    continue
+                company = companies.get(name.lower())
+                if not company:
+                    company = companies[name.lower()] = Company(name=name[:200], is_external=True, city=_city(item.get("location")),
+                                                                logo_color=_color(name), sector=guess_sector(f"{name} {title}"))
+                    db.add(company)
+                try:
+                    published = datetime.fromisoformat((item.get("updated") or "")[:19])
+                except ValueError:
+                    published = None
+                job = _job(company, title, item.get("snippet"), _city(item.get("location")), url, "Jooble", published)
+                db.add(job)
+                added.append(job)
+                known.add(_link_key(url))
+                known_titles.add((title.lower(), name.lower()))
+    old = []
+    if JOOBLE_API_KEY:  # only close old offers while new ones keep coming in, so the site never empties
+        limit = utcnow() - timedelta(days=OFFER_MAX_DAYS)
+        old = db.scalars(select(Job).where(Job.status == "open", Job.source != "", Job.created_at < limit)).all()
+        for job in old:
+            job.status = "closed"
+    row = db.get(Setting, "offers_refreshed_at") or Setting(key="offers_refreshed_at")
+    row.value = utcnow().isoformat()
+    db.merge(row)
+    db.commit()
+    log.info("Offers refreshed: %d added, %d closed", len(added), len(old))
+    return {"added": added, "closed": len(old)}
+
+
+def refresh_due(db) -> bool:
+    row = db.get(Setting, "offers_refreshed_at")
+    return not row or utcnow() - datetime.fromisoformat(row.value) > timedelta(hours=24)
 
 
 def import_directory(db) -> int:
@@ -130,6 +224,8 @@ def seed() -> None:
         if not db.scalar(select(func.count(DirectoryCompany.id))):
             log.info("Imported %d companies from data/companies.csv", import_directory(db))
             db.flush()
+        for job in db.scalars(select(Job).where(Job.title.contains("amp;") | Job.description.contains("amp;"))):
+            job.title, job.description = clean_text(job.title), clean_text(job.description)
         if not db.scalar(select(func.count(CompanyContact.id))):
             log.info("Imported %d company emails from data/company_emails.csv", import_contacts(db))
         db.commit()

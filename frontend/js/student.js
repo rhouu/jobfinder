@@ -86,6 +86,7 @@ function fillProfileForm(profile, name) {
 }
 
 async function loadProfile() {
+  loadCvFile();
   try {
     const data = await API.get("/api/student/profile");
     fillProfileForm(data.profile, data.user.name);
@@ -112,6 +113,44 @@ async function saveProfile(e) {
   });
 }
 
+/** The PDF CV saved in the profile: it is attached to spontaneous applications. */
+async function loadCvFile() {
+  const box = $("#cvFileBox");
+  let cv = null;
+  try { cv = await API.get("/api/student/cv-file"); } catch (_) { /* shown as "no CV" */ }
+  box.innerHTML = `
+    <span class="k-icon" style="--kc:#2e9e74">${icon("file")}</span>
+    <div class="grow"><strong>${t("cvf.title")}</strong>
+      <div class="muted small">${cv ? `${esc(cv.name)} · ${Math.max(1, Math.round(cv.size / 1024))} KB · ${t("cvf.uploadedOn", { date: dateStr(cv.uploaded_at) })}` : t("cvf.none")}</div></div>
+    <div class="row">
+      ${cv ? `<button class="btn btn-ghost btn-sm" id="cvDownload">${icon("eye", 15)} ${t("cvf.view")}</button>` : ""}
+      <label class="btn btn-ghost btn-sm">${icon("upload", 15)} ${t(cv ? "cvf.replace" : "cvf.upload")}<input type="file" accept="application/pdf" id="cvFileInput" hidden></label>
+      ${cv ? `<button class="btn btn-danger btn-sm" id="cvRemove" aria-label="${esc(t("cvf.remove"))}">${icon("trash", 15)}</button>` : ""}
+    </div>`;
+  $("#cvFileInput").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.type !== "application/pdf" || file.size > 2 * 1024 * 1024) return toast(t("spont.cvInvalid"), "error");
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try { await API.post("/api/student/cv-file", { file_name: file.name, file_base64: reader.result }); toast(t("cvf.saved"), "success"); loadCvFile(); }
+      catch (err) { toast(err.message, "error"); }
+    };
+    reader.readAsDataURL(file);
+  });
+  $("#cvDownload")?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/student/cv-file/download", { headers: { Authorization: `Bearer ${Auth.token()}` } });
+      if (!res.ok) throw new Error(t("cvf.none"));
+      window.open(URL.createObjectURL(await res.blob()), "_blank");
+    } catch (err) { toast(err.message, "error"); }
+  });
+  $("#cvRemove")?.addEventListener("click", async () => {
+    if (!(await confirmDialog(t("cvf.removeConfirm"), t("cvf.remove")))) return;
+    try { await API.del("/api/student/cv-file"); toast(t("cvf.removed"), "success"); loadCvFile(); } catch (err) { toast(err.message, "error"); }
+  });
+}
+
 /** PDF upload: the server reads the CV, we fill the form, the student checks it and clicks Save. */
 function uploadCv(file) {
   if (!file) return;
@@ -121,7 +160,8 @@ function uploadCv(file) {
     const zone = $("#dropZone");
     zone.classList.add("generating");
     try {
-      const { fields } = await API.post("/api/student/cv-upload", { file_base64: reader.result });
+      const { fields, cv_saved } = await API.post("/api/student/cv-upload", { file_base64: reader.result, file_name: file.name });
+      if (cv_saved) loadCvFile();
       const clean = Object.fromEntries(Object.entries(fields).filter(([, v]) => v && (!Array.isArray(v) || v.length) && (typeof v !== "object" || Object.keys(v).length)));
       if (clean.skills) clean.skills = [...new Set([...skillsTags.get(), ...clean.skills])];
       fillProfileForm(clean);

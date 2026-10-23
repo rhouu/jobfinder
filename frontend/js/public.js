@@ -5,8 +5,9 @@
      job   → job.html       offer detail, apply, reviews
      auth  → auth.html      sign in, register, Google, forgot / reset password, email verification
      companies → companies.html   companies hiring now + searchable company directory
+     legal → privacy.html, terms.html   privacy policy and terms of use (texts in i18n.js)
    ========================================================================== */
-const PAGES = { home: homePage, jobs: jobsPage, job: jobPage, auth: authPage, companies: companiesPage };
+const PAGES = { home: homePage, jobs: jobsPage, job: jobPage, auth: authPage, companies: companiesPage, legal: legalPage };
 PAGES[document.body.dataset.page]();
 
 // ============================================================ Landing page
@@ -278,25 +279,34 @@ function companiesPage() {
   }
 
   // Spontaneous application: message + CV emailed to the company; its reply goes to the student's own mailbox
-  function openSpontaneous(company, button) {
+  async function openSpontaneous(company, button) {
     if (!user) { location.href = `/auth.html?next=${encodeURIComponent(location.pathname + location.search)}`; return; }
     if (user.role !== "student") return toast(t("spont.studentsOnly"), "error");
+    const saved = await API.get("/api/student/cv-file").catch(() => null);
     modal({
       title: t("spont.title", { company: company.name }),
       body: `<p class="muted" style="margin-bottom:14px">${t("spont.intro", { company: company.name })}</p>
         <div class="field"><label for="spMsg">${t("spont.message")}</label>
           <textarea class="input" id="spMsg" rows="9">${esc(t("spont.template", { company: company.name, name: user.name }, true))}</textarea></div>
-        <div class="field"><label for="spCv">${t("spont.cv")}</label><input class="input" type="file" id="spCv" accept="application/pdf"></div>
+        <div class="field"><label>${t("spont.cv")}</label>
+          ${saved ? `<label class="radio-line"><input type="radio" name="spCvChoice" value="saved" checked> ${t("spont.useSaved", { name: saved.name })}</label>
+            <label class="radio-line"><input type="radio" name="spCvChoice" value="new"> ${t("spont.useOther")}</label>` : ""}
+          <div id="spNewCv" class="${saved ? "hidden" : ""}"><input class="input" type="file" id="spCv" accept="application/pdf">
+            <label class="radio-line"><input type="checkbox" id="spSaveCv" checked> ${t("spont.saveToProfile")}</label></div></div>
         <p class="notice small">${icon("mail", 15)} <span>${t("spont.privacy", { email: user.email })}</span></p>`,
       footer: `<button class="btn btn-ghost" data-close>${t("common.cancel")}</button><button class="btn btn-primary" id="spSend">${icon("send", 15)} ${t("spont.submit")}</button>`,
-      onOpen: (el, close) => $("#spSend", el).addEventListener("click", (e) => {
-        const btn = e.currentTarget, file = $("#spCv", el).files[0], message = $("#spMsg", el).value.trim();
+      onOpen: (el, close) => {
+        $$("[name=spCvChoice]", el).forEach((r) => r.addEventListener("change", () => $("#spNewCv", el).classList.toggle("hidden", r.value === "saved" && r.checked)));
+        $("#spSend", el).addEventListener("click", (e) => {
+        const btn = e.currentTarget, message = $("#spMsg", el).value.trim();
+        const useSaved = saved && $("[name=spCvChoice]:checked", el).value === "saved";
+        const file = useSaved ? null : $("#spCv", el).files[0];
         if (message.length < 30) return toast(t("spont.short"), "error");
-        if (!file || file.type !== "application/pdf" || file.size > 2 * 1024 * 1024) return toast(t("spont.cvInvalid"), "error");
-        const reader = new FileReader();
-        reader.onload = () => withLoading(btn, async () => {
+        if (!useSaved && (!file || file.type !== "application/pdf" || file.size > 2 * 1024 * 1024)) return toast(t("spont.cvInvalid"), "error");
+        const send = (cvBase64) => withLoading(btn, async () => {
           try {
-            await API.post(`/api/directory/${company.id}/apply`, { message, cv_name: file.name, cv_base64: reader.result });
+            if (cvBase64 && $("#spSaveCv", el).checked) await API.post("/api/student/cv-file", { file_name: file.name, file_base64: cvBase64 });
+            await API.post(`/api/directory/${company.id}/apply`, { message, cv_name: file ? file.name : "", cv_base64: cvBase64 || "" });
             sent.add(company.id);
             button.disabled = true;
             button.className = "btn btn-ghost btn-sm btn-block";
@@ -305,8 +315,12 @@ function companiesPage() {
             toast(t("spont.done", { company: company.name }), "success");
           } catch (err) { toast(err.message, "error"); }
         });
+        if (useSaved) return send("");
+        const reader = new FileReader();
+        reader.onload = () => send(reader.result);
         reader.readAsDataURL(file);
-      }),
+        });
+      },
     });
   }
 
@@ -331,6 +345,22 @@ function companiesPage() {
   if (user?.role === "student") {
     API.get("/api/student/spontaneous").then((list) => { list.forEach((r) => sent.add(r.directory_id)); loadDirectory(); }).catch(() => loadDirectory());
   } else loadDirectory();
+}
+
+// ============================================================ Privacy policy / terms of use
+const LEGAL_UPDATED = "2026-10-23";
+
+function legalPage() {
+  initPage();
+  const doc = document.body.dataset.doc, k = (key) => `legal.${doc}.${key}`;
+  const draw = (email) => {
+    const mail = `<a class="grad-text" href="mailto:${esc(email)}">${esc(email)}</a>`;
+    const sections = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<h2 ${n === 1 ? 'id="contact"' : ""}>${t(k("s" + n + "h"))}</h2><p>${t(k("s" + n), { email: mail }, true)}</p>`).join("");
+    $("#legalDoc").innerHTML = `<h1>${t(k("title"))}</h1><p class="muted">${t("legal.updated", { date: dateStr(LEGAL_UPDATED) })}</p>
+      <p class="lead">${t(k("intro"), { email: mail }, true)}</p>${sections}`;
+    document.title = `${t(k("title"))} — JobFinder.ma`;
+  };
+  API.get("/api/config").then((cfg) => draw(cfg.contact_email)).catch(() => draw("contact@jobfinder.ma"));
 }
 
 // ============================================================ Job detail

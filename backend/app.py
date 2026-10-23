@@ -13,9 +13,12 @@ Every URL of the API lives in this file, grouped in sections:
   9. Admin              analytics and moderation
 """
 import base64
+import json
 import logging
 import re
 import secrets
+import threading
+import time
 from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -29,25 +32,50 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from . import ai
-from .database import (FRONTEND_DIR, GOOGLE_CLIENT_ID, SITE_URL, Application, Base, Company, DirectoryCompany, EmailCode, Job, Message,
-                       Notification, Review, SpontaneousApplication,
+from .database import (CONTACT_EMAIL, FRONTEND_DIR, GOOGLE_CLIENT_ID, JOOBLE_API_KEY, OFFER_MAX_DAYS, SITE_URL, Application, Base, Company, DirectoryCompany, EmailCode,
+                       Job, Message, Notification, Review, SessionLocal, Setting, SpontaneousApplication, StudentCV,
                        SavedJob, SavedSearch, StudentProfile, User, engine, get_db, utcnow)
 from .helpers import (check_signature, current_user, guess_sector, hash_password, login_response, mail_enabled, make_token,
                       match_job, notify, optional_user, read_token, require_role, send_email, send_mail, sign, verify_password)
-from .seed import seed
+from .seed import refresh_due, refresh_offers, seed
 
 logging.basicConfig(level=logging.INFO)
 JOB_TYPES = ["CDI", "CDD", "Stage", "PFE", "Alternance", "Freelance"]
 STATUSES = ["submitted", "reviewing", "interview", "accepted", "rejected"]
 student_only, company_only, admin_only = require_role("student"), require_role("company"), require_role("admin")
+log = logging.getLogger("jobfinder")
 
 
 # ============================================================================ 1. SETUP
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(engine)  # creates missing tables
-    seed()                            # admin account + demo data on first start
+    seed()                            # admin account + real data on first start
+    threading.Thread(target=_daily_offers, daemon=True).start()
     yield
+
+
+def _refresh_and_alert(db: Session) -> dict:
+    """Fetches new offers, then sends job alerts for them (like offers posted by companies)."""
+    result = refresh_offers(db)
+    for job in result["added"][:60]:
+        _alert_matching_students(job, db)
+    db.commit()
+    return {"added": len(result["added"]), "closed": result["closed"]}
+
+
+def _daily_offers():
+    """Background loop: once a day, new offers from Jooble come in and old job-board offers close.
+    (On a free host that sleeps, this runs the next time the site wakes up.)"""
+    time.sleep(20)  # let the site finish starting
+    while True:
+        try:
+            with SessionLocal() as db:
+                if refresh_due(db):
+                    _refresh_and_alert(db)
+        except Exception:  # never let the loop die
+            log.exception("Daily offers refresh failed")
+        time.sleep(3600)
 
 
 app = FastAPI(title="JobFinder.ma API", lifespan=lifespan)
@@ -68,7 +96,8 @@ def favicon():
 
 @app.get("/api/config")
 def public_config():
-    return {"google_client_id": GOOGLE_CLIENT_ID, "ai_enabled": ai.ai_available(), "mail_enabled": mail_enabled()}
+    return {"google_client_id": GOOGLE_CLIENT_ID, "ai_enabled": ai.ai_available(), "mail_enabled": mail_enabled(),
+            "contact_email": CONTACT_EMAIL}
 
 
 THEMES = {"emerald": ("#10b981", "#06b6d4", "#06100d"), "sunset": ("#f97316", "#ec4899", "#140a0b"),
@@ -444,7 +473,7 @@ def company_directory(q: str = "", sector: str = "", page: int = 1, per_page: in
 class SpontaneousIn(BaseModel):
     message: str = Field(min_length=30, max_length=3000)
     cv_name: str = Field(default="CV.pdf", max_length=120)
-    cv_base64: str
+    cv_base64: str = ""  # empty: use the CV saved in the profile
 
 
 SPONTANEOUS_PER_DAY = 5  # limits abuse: a student can't use the site to spam companies
@@ -467,15 +496,12 @@ def spontaneous_apply(company_id: int, data: SpontaneousIn, user: User = Depends
     if db.scalar(select(func.count(SpontaneousApplication.id)).where(SpontaneousApplication.student_id == user.id,
                                                                      SpontaneousApplication.created_at >= today)) >= SPONTANEOUS_PER_DAY:
         raise HTTPException(429, f"You can send {SPONTANEOUS_PER_DAY} applications per day. Try again tomorrow.")
-    try:
-        pdf = base64.b64decode(data.cv_base64.split(",")[-1], validate=True)
-    except ValueError:
-        raise HTTPException(400, "Invalid file.")
-    if len(pdf) > 2 * 1024 * 1024 or not pdf.startswith(b"%PDF"):
-        raise HTTPException(400, "Please attach your CV as a PDF file under 2 MB.")
-    file_name = re.sub(r"[^\w.\- ]", "", data.cv_name).strip() or "CV.pdf"
-    if not file_name.lower().endswith(".pdf"):
-        file_name += ".pdf"
+    if data.cv_base64:
+        pdf, file_name = _decode_pdf(data.cv_base64, CV_MAX_MB), _pdf_name(data.cv_name)
+    elif user.cv_file:
+        pdf, file_name = user.cv_file.data, user.cv_file.file_name
+    else:
+        raise HTTPException(400, "Attach your CV as a PDF file under 2 MB.")
 
     optout = f"{SITE_URL}/api/directory/{company.id}/optout?sig={sign(f'optout:{company.id}')}"
     body = (f"{data.message.strip()}\n\n{user.name}\n{user.email}\n\n"
@@ -716,6 +742,7 @@ def update_profile(data: ProfileIn, user: User = Depends(student_only), db: Sess
 
 class UploadIn(BaseModel):
     file_base64: str
+    file_name: str = Field(default="CV.pdf", max_length=120)
 
 
 COMMON_SKILLS = ["Python", "Java", "JavaScript", "TypeScript", "C", "C++", "C#", "PHP", "SQL", "HTML", "CSS", "React", "Angular",
@@ -726,19 +753,76 @@ COMMON_SKILLS = ["Python", "Java", "JavaScript", "TypeScript", "C", "C++", "C#",
 
 @app.post("/api/student/cv-upload")
 def upload_cv(data: UploadIn, user: User = Depends(student_only), db: Session = Depends(get_db)):
-    """Reads a PDF CV and returns profile fields. Nothing is saved: the student reviews them first."""
-    try:
-        pdf = base64.b64decode(data.file_base64.split(",")[-1], validate=True)
-    except ValueError:
-        raise HTTPException(400, "Invalid file.")
-    if len(pdf) > 5 * 1024 * 1024 or not pdf.startswith(b"%PDF"):
-        raise HTTPException(400, "Please upload a PDF file under 5 MB.")
+    """Reads a PDF CV and returns profile fields (the student reviews them before saving the profile).
+    The PDF itself is kept as the student's saved CV when it is under 2 MB."""
+    pdf = _decode_pdf(data.file_base64, 5)
     job_skills = {s for skills in db.scalars(select(Job.skills)) for s in skills or []}
     try:
         fields, source = ai.read_cv_pdf(pdf, sorted(job_skills | set(COMMON_SKILLS), key=len, reverse=True))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    return {"fields": fields, "source": source}
+    saved = len(pdf) <= CV_MAX_MB * 1024 * 1024
+    if saved:
+        _store_cv(user, data.file_name or "CV.pdf", pdf, db)
+    return {"fields": fields, "source": source, "cv_saved": saved}
+
+
+# --------------------------------------------------------- saved CV file (reused for spontaneous applications)
+CV_MAX_MB = 2
+
+
+def _decode_pdf(file_base64: str, max_mb: int) -> bytes:
+    try:
+        pdf = base64.b64decode(file_base64.split(",")[-1], validate=True)
+    except ValueError:
+        raise HTTPException(400, "Invalid file.")
+    if len(pdf) > max_mb * 1024 * 1024 or not pdf.startswith(b"%PDF"):
+        raise HTTPException(400, f"Please upload a PDF file under {max_mb} MB.")
+    return pdf
+
+
+def _pdf_name(name: str) -> str:
+    name = re.sub(r"[^\w.\- ]", "", name or "").strip()[:100] or "CV.pdf"
+    return name if name.lower().endswith(".pdf") else name + ".pdf"
+
+
+def _store_cv(user: User, name: str, pdf: bytes, db: Session) -> StudentCV:
+    cv = user.cv_file or StudentCV(user_id=user.id)
+    cv.file_name, cv.data, cv.uploaded_at = _pdf_name(name), pdf, utcnow()
+    user.cv_file = cv
+    db.commit()
+    return cv
+
+
+class CvFileIn(BaseModel):
+    file_name: str = Field(default="CV.pdf", max_length=120)
+    file_base64: str
+
+
+@app.get("/api/student/cv-file")
+def get_cv_file(user: User = Depends(student_only)):
+    return user.cv_file.to_dict() if user.cv_file else None
+
+
+@app.get("/api/student/cv-file/download")
+def download_cv_file(user: User = Depends(student_only)):
+    if not user.cv_file:
+        raise HTTPException(404, "No CV saved yet.")
+    return Response(user.cv_file.data, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{user.cv_file.file_name}"'})
+
+
+@app.post("/api/student/cv-file")
+def save_cv_file(data: CvFileIn, user: User = Depends(student_only), db: Session = Depends(get_db)):
+    return _store_cv(user, data.file_name, _decode_pdf(data.file_base64, CV_MAX_MB), db).to_dict()
+
+
+@app.delete("/api/student/cv-file")
+def delete_cv_file(user: User = Depends(student_only), db: Session = Depends(get_db)):
+    if user.cv_file:
+        db.delete(user.cv_file)
+        db.commit()
+    return {"ok": True}
 
 
 @app.get("/api/student/overview")
@@ -1305,8 +1389,35 @@ def admin_stats(days: int = 30, _: User = Depends(admin_only), db: Session = Dep
         "jobs_by_sector": grouped(Job.sector, open_job),
         "applications_by_status": grouped(Application.status), "users_by_role": grouped(User.role),
         "recent_users": [u.public() for u in db.scalars(select(User).order_by(User.created_at.desc()).limit(6))],
+        "offers_refresh": {"enabled": bool(JOOBLE_API_KEY), "last": (db.get(Setting, "offers_refreshed_at") or Setting(value="")).value},
         "ai_enabled": ai.ai_available(),
     }
+
+
+@app.post("/api/admin/refresh-offers")
+def admin_refresh_offers(_: User = Depends(admin_only), db: Session = Depends(get_db)):
+    if not JOOBLE_API_KEY:
+        raise HTTPException(400, "Add JOOBLE_API_KEY in the server settings to fetch new offers.")
+    return _refresh_and_alert(db)
+
+
+# Backup: every table as JSON (passwords stay hashed, files as base64). Keep the file somewhere safe.
+BACKUP_TABLES = ["users", "student_profiles", "companies", "jobs", "applications", "saved_jobs", "messages", "reviews",
+                 "saved_searches", "notifications", "spontaneous_applications", "student_cvs", "company_contacts", "settings"]
+
+
+@app.get("/api/admin/backup")
+def admin_backup(_: User = Depends(admin_only), db: Session = Depends(get_db)):
+    def plain(v):
+        if isinstance(v, bytes):
+            return base64.b64encode(v).decode()
+        return v.isoformat() if isinstance(v, datetime) else v
+
+    tables = {name: [{k: plain(v) for k, v in row._mapping.items()} for row in db.execute(Base.metadata.tables[name].select())]
+              for name in BACKUP_TABLES if name in Base.metadata.tables}
+    body = json.dumps({"created_at": utcnow().isoformat(), "tables": tables}, ensure_ascii=False)
+    return Response(body, media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="jobfinder-backup-{utcnow():%Y-%m-%d}.json"'})
 
 
 @app.get("/api/admin/users")
@@ -1442,4 +1553,69 @@ def admin_delete_review(review_id: int, _: User = Depends(admin_only), db: Sessi
 
 
 # Website files (HTML, CSS, JS) — must stay last so it doesn't hide the API routes above
+# ============================================================================ SEARCH ENGINES (Google for Jobs)
+# The offer page is sent with its title, description and a JobPosting block (schema.org) already inside,
+# so Google can show the offer in its job search. The sitemap lists every open offer.
+EMPLOYMENT_TYPES = {"CDI": "FULL_TIME", "CDD": "TEMPORARY", "Stage": "INTERN", "PFE": "INTERN", "Alternance": "INTERN",
+                    "Freelance": "CONTRACTOR"}
+
+
+def job_posting(job: Job) -> dict:
+    """schema.org JobPosting for one offer: https://developers.google.com/search/docs/appearance/structured-data/job-posting"""
+    c = job.company
+    data = {
+        "@context": "https://schema.org/", "@type": "JobPosting",
+        "title": job.title,
+        "description": escape(job.description or job.title).replace("\n", "<br>"),
+        "datePosted": job.created_at.date().isoformat(),
+        "validThrough": (job.deadline or job.created_at + timedelta(days=OFFER_MAX_DAYS)).isoformat(),
+        "employmentType": EMPLOYMENT_TYPES.get(job.type, "OTHER"),
+        "hiringOrganization": {"@type": "Organization", "name": c.name, **({"sameAs": c.website} if c.website else {}),
+                               **({"logo": f"{SITE_URL}/api/companies/{c.id}/logo"} if c.logo else {})},
+        "jobLocation": {"@type": "Place", "address": {"@type": "PostalAddress", "addressLocality": job.city, "addressCountry": "MA"}},
+        "directApply": True,  # students apply on JobFinder.ma
+        "identifier": {"@type": "PropertyValue", "name": "JobFinder.ma", "value": str(job.id)},
+        "url": f"{SITE_URL}/job.html?id={job.id}",
+    }
+    if job.work_mode == "Remote":
+        data["jobLocationType"] = "TELECOMMUTE"
+        data["applicantLocationRequirements"] = {"@type": "Country", "name": "Morocco"}
+    if job.salary_min or job.salary_max:
+        data["baseSalary"] = {"@type": "MonetaryAmount", "currency": "MAD", "value": {
+            "@type": "QuantitativeValue", "minValue": job.salary_min or job.salary_max, "maxValue": job.salary_max or job.salary_min,
+            "unitText": "MONTH"}}
+    return data
+
+
+@app.get("/job.html", include_in_schema=False)
+def job_page(id: int = 0, db: Session = Depends(get_db)):
+    page = (FRONTEND_DIR / "job.html").read_text(encoding="utf-8")
+    job = db.get(Job, id) if id else None
+    if job and job.status == "open":
+        about = (job.description or "")[:155]
+        ld = json.dumps(job_posting(job), ensure_ascii=False).replace("</", "<\\/")
+        head = (f"<title>{escape(job.title)} — {escape(job.company.name)} | JobFinder.ma</title>\n"
+                f'  <meta name="description" content="{escape(about)}">\n'
+                f'  <link rel="canonical" href="{SITE_URL}/job.html?id={job.id}">\n'
+                f'  <script type="application/ld+json">{ld}</script>')
+        page = page.replace("<title>Offer — JobFinder.ma</title>", head, 1)
+    return HTMLResponse(page, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap(db: Session = Depends(get_db)):
+    pages = [f"{SITE_URL}/", f"{SITE_URL}/jobs.html", f"{SITE_URL}/companies.html", f"{SITE_URL}/privacy.html", f"{SITE_URL}/terms.html"]
+    rows = [f"<url><loc>{escape(u)}</loc></url>" for u in pages]
+    for job_id, created in db.execute(select(Job.id, Job.created_at).where(Job.status == "open").order_by(Job.created_at.desc())):
+        rows.append(f"<url><loc>{SITE_URL}/job.html?id={job_id}</loc><lastmod>{created.date().isoformat()}</lastmod></url>")
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + "".join(rows) + "</urlset>"
+    return Response(xml, media_type="application/xml")
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots():
+    return Response(f"User-agent: *\nDisallow: /api/\nDisallow: /dashboard.html\nDisallow: /company.html\nDisallow: /admin.html\n"
+                    f"Sitemap: {SITE_URL}/sitemap.xml\n", media_type="text/plain")
+
+
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

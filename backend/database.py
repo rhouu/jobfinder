@@ -15,6 +15,8 @@ Tables
   directory        public company directory (Marrakech businesses, loaded from data/companies.csv)
   company_contacts private email of a directory company (never sent to the browser)
   email_codes      6-digit code emailed to confirm a new account's address
+  student_cvs      the PDF CV a student saved, reused for spontaneous applications
+  settings         small values the site remembers (e.g. when offers were last refreshed)
   spontaneous_applications  a student's CV emailed to a directory company
 """
 import os
@@ -42,6 +44,13 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 SMTP = {k: os.getenv(f"SMTP_{k.upper()}", "") for k in ("host", "port", "user", "password", "sender")}
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@jobfinder.ma")
+CONTACT_EMAIL = os.getenv("CONTACT_EMAIL", "") or ADMIN_EMAIL  # shown on the privacy and terms pages
+# Fresh offers from Jooble's official API (free key: https://jooble.org/api/about). Empty key = no automatic refresh.
+JOOBLE_API_KEY = os.getenv("JOOBLE_API_KEY", "")
+JOOBLE_HOST = os.getenv("JOOBLE_HOST", "jooble.org")
+JOOBLE_LOCATION = os.getenv("JOOBLE_LOCATION", "Maroc")
+JOOBLE_KEYWORDS = [k.strip() for k in os.getenv("JOOBLE_KEYWORDS", "stage,PFE,junior,alternance,débutant").split(",") if k.strip()]
+OFFER_MAX_DAYS = int(os.getenv("OFFER_MAX_DAYS", "45"))  # offers from job boards close after this many days
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "Admin@123")
 
 # On a real server (Render sets RENDER=true) refuse to start with the default secrets
@@ -101,6 +110,7 @@ class User(Base):
     searches: Mapped[list["SavedSearch"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     spontaneous: Mapped[list["SpontaneousApplication"]] = relationship(back_populates="student", cascade="all, delete-orphan")
     email_code: Mapped["EmailCode | None"] = relationship(cascade="all, delete-orphan")
+    cv_file: Mapped["StudentCV | None"] = relationship(cascade="all, delete-orphan")
 
     def public(self) -> dict:
         return {"id": self.id, "email": self.email, "name": self.name, "role": self.role,
@@ -388,6 +398,26 @@ class DirectoryCompany(Base):
         return {"id": self.id, "name": self.name, "sector": self.sector, "category": self.category, "city": self.city,
                 "area": self.area, "website": self.website, "maps_url": self.maps_url, "rating": self.rating,
                 "reviews": self.reviews, "latitude": self.latitude, "longitude": self.longitude, "can_apply": self.can_apply}
+
+
+class Setting(Base):
+    """A small value the site remembers between restarts, e.g. "offers_refreshed_at"."""
+    __tablename__ = "settings"
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="")
+
+
+class StudentCV(Base):
+    """The PDF CV a student saved once (max 2 MB), attached to their spontaneous applications."""
+    __tablename__ = "student_cvs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    file_name: Mapped[str] = mapped_column(String(120))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    def to_dict(self) -> dict:
+        return {"name": self.file_name, "size": len(self.data), "uploaded_at": iso(self.uploaded_at)}
 
 
 class EmailCode(Base):

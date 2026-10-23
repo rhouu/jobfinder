@@ -457,7 +457,7 @@ function renderFooter() {
       <div><h4>${t("footer.employers")}</h4><ul><li><a href="/auth.html?mode=register&role=company">${t("footer.createCompany")}</a></li><li><a href="/company.html#jobs">${t("footer.publish")}</a></li><li><a href="/company.html#applicants">${t("nav.applicants")}</a></li></ul></div>
       <div><h4>${t("footer.cities")}</h4><ul>${["Casablanca", "Rabat", "Marrakech", "Tanger"].map((c) => `<li><a href="/jobs.html?city=${c}">${c}</a></li>`).join("")}</ul></div>
     </div>
-    <div class="footer-bottom"><span>© ${new Date().getFullYear()} JobFinder.ma — ${t("footer.made")}</span><span>${t("footer.legal")} · <a href="https://unsplash.com" target="_blank" rel="noopener">${t("footer.photos")}</a></span></div>
+    <div class="footer-bottom"><span>© ${new Date().getFullYear()} JobFinder.ma — ${t("footer.made")}</span><span><a href="/privacy.html">${t("footer.privacy")}</a> · <a href="/terms.html">${t("footer.terms")}</a> · <a href="/privacy.html#contact">${t("footer.contact")}</a> · <a href="https://unsplash.com" target="_blank" rel="noopener">${t("footer.photos")}</a></span></div>
   </div>`;
   document.body.appendChild(f);
 }
