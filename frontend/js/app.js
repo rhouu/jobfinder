@@ -291,8 +291,8 @@ function panelRouter(defaultPanel, loaders = {}) {
 function barChart(el, rows) {
   const max = Math.max(1, ...rows.map((r) => r.value));
   el.innerHTML = rows.map((r) => `
-    <div class="bar-row"><span class="muted ellipsis">${esc(r.label)}</span>
-      <div class="bar-track"><div class="bar-fill" data-w="${(100 * r.value) / max}" style="background:${r.color || "var(--grad)"}"></div></div>
+    <div class="bar-row" title="${esc(r.label)}: ${r.value}"><span class="muted ellipsis">${esc(r.label)}</span>
+      <div class="bar-track"><div class="bar-fill" data-w="${(100 * r.value) / max}" style="background:${r.color || "var(--series-1)"}"></div></div>
       <strong class="end">${r.value}</strong></div>`).join("");
   requestAnimationFrame(() => requestAnimationFrame(() => $$(".bar-fill", el).forEach((b) => (b.style.width = b.dataset.w + "%"))));
 }

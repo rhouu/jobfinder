@@ -1110,14 +1110,16 @@ def schedule_interview(app_id: int, data: InterviewIn, user: User = Depends(comp
 
 # ============================================================================ 9. ADMIN
 @app.get("/api/admin/stats")
-def admin_stats(_: User = Depends(admin_only), db: Session = Depends(get_db)):
+def admin_stats(days: int = 30, _: User = Depends(admin_only), db: Session = Depends(get_db)):
+    days = min(max(days, 7), 90)
     now = utcnow()
-    start = now - timedelta(days=29)
-    days = [(start + timedelta(days=i)).date() for i in range(30)]
+    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    week = now - timedelta(days=7)
+    day_list = [(start + timedelta(days=i)).date() for i in range(days)]
 
     def per_day(column) -> list[int]:
         counts = Counter(d.date() for d in db.scalars(select(column).where(column >= start)))
-        return [counts.get(day, 0) for day in days]
+        return [counts.get(day, 0) for day in day_list]
 
     def grouped(column, *where) -> dict:
         return dict(db.execute(select(column, func.count()).where(*where).group_by(column)).all())
@@ -1126,18 +1128,30 @@ def admin_stats(_: User = Depends(admin_only), db: Session = Depends(get_db)):
         return db.scalar(select(func.count(model.id)).where(*where))
 
     total_apps = count(Application)
+    open_job = Job.status == "open"
     return {
-        "totals": {"users": count(User), "students": count(User, User.role == "student"), "companies": count(Company),
+        "totals": {"users": count(User), "students": count(User, User.role == "student"),
+                   "company_users": count(User, User.role == "company"),
+                   "new_users_week": count(User, User.created_at >= week),
+                   "companies": count(Company, Company.is_external.is_(False)),
+                   "external_companies": count(Company, Company.is_external.is_(True)),
+                   "directory": count(DirectoryCompany),
                    "verified_companies": count(Company, Company.verification_status == "verified"),
                    "pending_verifications": count(Company, Company.verification_status == "pending"),
-                   "jobs": count(Job), "open_jobs": count(Job, Job.status == "open"), "applications": total_apps,
-                   "reviews": count(Review), "messages": count(Message),
-                   "new_users_week": count(User, User.created_at >= now - timedelta(days=7)),
-                   "acceptance_rate": round(100 * count(Application, Application.status == "accepted") / max(1, total_apps))},
-        "timeline": {"labels": [d.strftime("%d/%m") for d in days], "users": per_day(User.created_at),
+                   "jobs": count(Job), "open_jobs": count(Job, open_job),
+                   "site_jobs": count(Job, open_job, Job.source == ""),
+                   "external_jobs": count(Job, open_job, Job.source != ""),
+                   "applications": total_apps, "new_apps_week": count(Application, Application.created_at >= week),
+                   "acceptance_rate": round(100 * count(Application, Application.status == "accepted") / max(1, total_apps)),
+                   "reviews": count(Review), "new_reviews_week": count(Review, Review.created_at >= week),
+                   "messages": count(Message),
+                   "unverified_emails": count(User, User.email_verified.is_(False), User.role != "admin")},
+        "timeline": {"labels": [d.isoformat() for d in day_list], "users": per_day(User.created_at),
                      "applications": per_day(Application.created_at)},
-        "jobs_by_type": grouped(Job.type, Job.status == "open"), "jobs_by_city": grouped(Job.city, Job.status == "open"),
+        "jobs_by_type": grouped(Job.type, open_job), "jobs_by_city": grouped(Job.city, open_job),
+        "jobs_by_sector": grouped(Job.sector, open_job),
         "applications_by_status": grouped(Application.status), "users_by_role": grouped(User.role),
+        "recent_users": [u.public() for u in db.scalars(select(User).order_by(User.created_at.desc()).limit(6))],
         "ai_enabled": ai.ai_available(),
     }
 

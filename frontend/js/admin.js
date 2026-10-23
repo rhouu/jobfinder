@@ -3,66 +3,112 @@
    Tabs: analytics · users · companies (verification) · offers · reviews
    ========================================================================== */
 const me = Auth.require("admin");
-const PALETTE = ["#2e9e74", "#5b8def", "#f2a33a", "#9b7ede", "#4fb8c9", "#e8836b", "#f4b183", "#e88fb4"];
-
 // ------------------------------------------------------------ Charts
-function lineChart(el, labels, series) {
-  const W = 800, H = 240, P = { l: 34, r: 12, t: 14, b: 28 };
-  const max = Math.max(4, ...series.flatMap((s) => s.data));
-  const x = (i) => P.l + (i * (W - P.l - P.r)) / (labels.length - 1);
-  const y = (v) => H - P.b - (v * (H - P.t - P.b)) / max;
-  const curve = (data) => data.map((v, i) => {
-    if (i === 0) return `M${x(0)},${y(v)}`;
-    const cx = (x(i - 1) + x(i)) / 2;
-    return `C${cx},${y(data[i - 1])} ${cx},${y(v)} ${x(i)},${y(v)}`;
-  }).join(" ");
-  const grid = [0, 0.25, 0.5, 0.75, 1].map((f) => {
-    const v = Math.round(max * f);
-    return `<line class="grid-line" x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${P.l - 8}" y="${y(v) + 3}" text-anchor="end">${v}</text>`;
-  }).join("");
-  const xLabels = labels.map((l, i) => (i % 5 === 0 || i === labels.length - 1) ? `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${esc(l)}</text>` : "").join("");
-  const paths = series.map((s, n) => `
-    <defs><linearGradient id="g${n}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${s.color}" stop-opacity=".28"/><stop offset="1" stop-color="${s.color}" stop-opacity="0"/></linearGradient></defs>
-    <path d="${curve(s.data)} L${x(s.data.length - 1)},${H - P.b} L${x(0)},${H - P.b} Z" fill="url(#g${n})" opacity="0" style="animation:fadeUp 1s ${0.6 + n * 0.2}s forwards"/>
-    <path class="path" d="${curve(s.data)}" stroke="${s.color}" style="animation-delay:${n * 0.2}s"/>`).join("");
-  el.innerHTML = `<svg class="line-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(t("adm.activity"))}" style="direction:ltr">${grid}${xLabels}${paths}</svg>`;
-}
+const dayLabel = (iso) => new Date(iso + "T00:00:00").toLocaleDateString(LOCALE, { day: "numeric", month: "short" });
 
-function donut(el, entries, label) {
-  const total = entries.reduce((s, e) => s + e.value, 0);
-  let acc = 0;
-  const stops = entries.map((e) => { const a = acc; acc += (e.value / (total || 1)) * 100; return `${e.color} ${a}% ${acc}%`; }).join(",");
-  el.innerHTML = `
-    <div class="donut" style="background:conic-gradient(${stops || "var(--surface-2) 0 100%"})"><div class="center"><div>${fmt.format(total)}<small>${esc(label)}</small></div></div></div>
-    <div class="grow" style="display:grid;gap:8px;min-width:160px">${entries.map((e) => `
-      <div class="row small" style="flex-wrap:nowrap"><span style="width:10px;height:10px;border-radius:3px;background:${e.color}"></span><span class="muted grow">${esc(e.label)}</span>
-        <strong>${e.value}</strong><span class="muted end" style="width:42px">${Math.round((100 * e.value) / (total || 1))}%</span></div>`).join("")}</div>`;
+// Line chart drawn at the container's real width (so the text is never stretched), with a hover tooltip
+function lineChart(el, labels, series) {
+  el._chart = [labels, series];
+  const W = Math.max(300, el.clientWidth), H = 220, P = { l: 30, r: 10, t: 10, b: 26 };
+  const step = Math.max(1, Math.ceil(Math.max(...series.flatMap((s) => s.data)) / 4)), max = step * 4;
+  const x = (i) => P.l + (i * (W - P.l - P.r)) / Math.max(1, labels.length - 1);
+  const y = (v) => H - P.b - (v * (H - P.t - P.b)) / max;
+  const grid = [0, 1, 2, 3, 4].map((n) => `<line class="grid-line" x1="${P.l}" x2="${W - P.r}" y1="${y(n * step)}" y2="${y(n * step)}"/>
+    <text x="${P.l - 8}" y="${y(n * step) + 4}" text-anchor="end">${n * step}</text>`).join("");
+  const every = Math.ceil(labels.length / Math.max(2, Math.floor((W - P.l) / 70)));
+  const xLabels = labels.map((l, i) => ((labels.length - 1 - i) % every === 0)
+    ? `<text x="${x(i)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === labels.length - 1 ? "end" : "middle"}">${esc(dayLabel(l))}</text>` : "").join("");
+  const lines = series.map((s) => {
+    const pts = s.data.map((v, i) => `${x(i)},${y(v)}`).join(" ");
+    return `<polygon points="${P.l},${y(0)} ${pts} ${x(s.data.length - 1)},${y(0)}" fill="${s.color}" opacity=".08"/>
+      <polyline class="path" points="${pts}" stroke="${s.color}"/>`;
+  }).join("");
+  const dots = series.map((s) => `<circle class="hover-dot" r="4.5" fill="${s.color}"/>`).join("");
+  el.innerHTML = `<svg class="line-chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc($("#activityTitle").textContent)}" style="direction:ltr">
+      ${grid}${xLabels}${lines}<line class="crosshair" y1="${P.t}" y2="${H - P.b}"/>${dots}
+      <rect class="hit" x="${P.l}" y="0" width="${W - P.l - P.r}" height="${H}" fill="transparent"/></svg>
+    <div class="chart-tip" hidden></div>`;
+  const svg = el.querySelector("svg"), tip = el.querySelector(".chart-tip"), cross = svg.querySelector(".crosshair");
+  const show = (evt) => {
+    const box = svg.getBoundingClientRect();
+    const i = Math.min(labels.length - 1, Math.max(0, Math.round(((evt.clientX - box.left - P.l) / (W - P.l - P.r)) * (labels.length - 1))));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.style.opacity = 1;
+    svg.querySelectorAll(".hover-dot").forEach((d, n) => { d.setAttribute("cx", x(i)); d.setAttribute("cy", y(series[n].data[i])); d.style.opacity = 1; });
+    tip.innerHTML = `<strong>${esc(dayLabel(labels[i]))}</strong>${series.map((s) => `<div><i style="background:${s.color}"></i>${esc(s.label)} <b>${s.data[i]}</b></div>`).join("")}`;
+    tip.hidden = false;
+    tip.style.left = (x(i) + 14 + tip.offsetWidth > W ? x(i) - 14 - tip.offsetWidth : x(i) + 14) + "px";
+  };
+  const hide = () => { tip.hidden = true; cross.style.opacity = 0; svg.querySelectorAll(".hover-dot").forEach((d) => (d.style.opacity = 0)); };
+  const hit = svg.querySelector(".hit");
+  hit.addEventListener("pointermove", show);
+  hit.addEventListener("pointerleave", hide);
+}
+window.addEventListener("resize", debounce(() => { const el = $("#lineChart"); if (el._chart && el.offsetParent) lineChart(el, ...el._chart); }, 200));
+
+const emptyChart = (text) => `<div class="chart-empty">${icon("chart", 28)}<p>${esc(text)}</p></div>`;
+
+// "To do" card: only the things that need the admin's attention
+function todoList(tot, aiOn) {
+  const items = [
+    { n: tot.pending_verifications, key: "adm.todoPending", href: "#companies", ic: "shield" },
+    { n: tot.new_reviews_week, key: "adm.todoReviews", href: "#reviews", ic: "star" },
+    { n: tot.unverified_emails, key: "adm.todoEmails", href: "#users", ic: "mail" },
+  ].filter((i) => i.n > 0);
+  $("#todoList").innerHTML = items.map((i) => `
+      <a class="todo-item" href="${i.href}"><span class="todo-icon">${icon(i.ic, 16)}</span><span class="grow">${t(i.key)}</span><span class="todo-count">${i.n}</span></a>`).join("")
+    + (aiOn ? "" : `<div class="todo-item"><span class="todo-icon">${icon("spark", 16)}</span><span class="grow">${t("adm.todoAi")}</span></div>`)
+    || `<div class="chart-empty">${icon("check", 28)}<p>${t("adm.allGood")}</p></div>`;
 }
 
 // ------------------------------------------------------------ Analytics
+let statDays = 30;
+
 async function loadStats() {
   try {
-    const s = await API.get("/api/admin/stats");
+    const s = await API.get(`/api/admin/stats?days=${statDays}`);
     const tot = s.totals;
+    const delta = (el, n) => { el.textContent = t("adm.thisWeek", { n }); el.classList.toggle("up", n > 0); };
     animateCount($("#tUsers"), tot.users);
-    animateCount($("#tCompanies"), tot.companies);
+    $("#tUsersSub").textContent = t("adm.usersSplit", { s: tot.students, c: tot.company_users });
+    delta($("#tUsersWeek"), tot.new_users_week);
     animateCount($("#tJobs"), tot.open_jobs);
+    $("#tJobsSub").textContent = t("adm.offersSplit", { s: tot.site_jobs, e: tot.external_jobs });
+    $("#tJobsType").textContent = t("adm.internships", { n: (s.jobs_by_type.Stage || 0) + (s.jobs_by_type.PFE || 0) });
     animateCount($("#tApps"), tot.applications);
-    $("#tNewUsers").textContent = t("adm.thisWeek", { n: tot.new_users_week });
-    $("#tVerified").textContent = t("adm.verifiedPending", { v: tot.verified_companies, p: tot.pending_verifications });
-    $("#tAllJobs").textContent = t("adm.totalOffers", { n: tot.jobs });
-    $("#tRate").textContent = t("adm.acceptance", { n: tot.acceptance_rate });
+    $("#tAppsSub").textContent = t("adm.acceptance", { n: tot.acceptance_rate });
+    delta($("#tAppsWeek"), tot.new_apps_week);
+    animateCount($("#tCompanies"), tot.companies);
+    $("#tCompaniesSub").textContent = t("adm.verifiedPending", { v: tot.verified_companies, p: tot.pending_verifications });
+    $("#tDirectory").textContent = t("adm.inDirectory", { d: fmt.format(tot.directory), e: tot.external_companies });
     $("#pendingCount").textContent = tot.pending_verifications;
     $("#aiBadge").className = `badge ${s.ai_enabled ? "badge-green" : "badge-gold"}`;
     $("#aiBadge").innerHTML = `${icon("spark", 14)} ${t(s.ai_enabled ? "adm.aiOn" : "adm.aiOff")}`;
-    lineChart($("#lineChart"), s.timeline.labels, [{ data: s.timeline.users, color: "#2e9e74" }, { data: s.timeline.applications, color: "#9b7ede" }]);
-    donut($("#statusDonut"), Object.keys(STATUS_COLORS).map((k) => ({ label: t("status." + k), value: s.applications_by_status[k] || 0, color: STATUS_COLORS[k] })), t("nav.applications"));
-    const roleColors = { student: "#2e9e74", company: "#5b8def", admin: "#f2a33a" };
-    donut($("#roleDonut"), Object.entries(s.users_by_role).map(([k, v]) => ({ label: t("role." + k), value: v, color: roleColors[k] })), t("adm.users"));
-    barChart($("#typeChart"), Object.entries(s.jobs_by_type).sort((a, b) => b[1] - a[1]).map(([k, v], i) => ({ label: k, value: v, color: PALETTE[i % PALETTE.length] })));
-    barChart($("#cityChart"), Object.entries(s.jobs_by_city).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: k, value: v })));
+
+    $("#activityTitle").textContent = t("adm.activityRange", { n: statDays });
+    $("#sumUsers").textContent = s.timeline.users.reduce((a, b) => a + b, 0);
+    $("#sumApps").textContent = s.timeline.applications.reduce((a, b) => a + b, 0);
+    const css = getComputedStyle(document.documentElement);
+    lineChart($("#lineChart"), s.timeline.labels, [
+      { label: t("adm.newUsers"), data: s.timeline.users, color: css.getPropertyValue("--series-1").trim() },
+      { label: t("nav.applications"), data: s.timeline.applications, color: css.getPropertyValue("--series-2").trim() }]);
+    todoList(tot, s.ai_enabled);
+
+    if (tot.applications) barChart($("#statusChart"), Object.keys(STATUS_COLORS).map((k) => ({ label: t("status." + k), value: s.applications_by_status[k] || 0, color: STATUS_COLORS[k] })));
+    else $("#statusChart").innerHTML = emptyChart(t("adm.noApps"));
+    const sorted = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
+    barChart($("#sectorChart"), sorted(s.jobs_by_sector).map(([k, v]) => ({ label: sectorLabel(k || "services"), value: v })));
+    barChart($("#cityChart"), sorted(s.jobs_by_city).slice(0, 8).map(([k, v]) => ({ label: k, value: v })));
+    $("#recentUsers").innerHTML = s.recent_users.map((u) => `
+      <div class="recent-user">${avatar(u)}<div class="grow" style="min-width:0"><strong class="ellipsis">${esc(u.name)}</strong><div class="muted small ellipsis">${esc(u.email)}</div></div>
+        <div class="end"><span class="badge ${ROLE_BADGE[u.role]}">${t("role." + u.role)}</span><div class="muted small">${timeAgo(u.created_at)}</div></div></div>`).join("");
   } catch (err) { toast(err.message, "error"); }
 }
+
+$$("#rangeSwitch button").forEach((b) => b.addEventListener("click", () => {
+  $$("#rangeSwitch button").forEach((x) => x.classList.toggle("active", x === b));
+  statDays = +b.dataset.days;
+  loadStats();
+}));
 
 // ---------------------------------------------------------------- Users
 const ROLE_BADGE = { student: "badge-green", company: "badge-blue", admin: "badge-gold" };
