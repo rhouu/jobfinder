@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from . import ai
 from .database import (CONTACT_EMAIL, FRONTEND_DIR, GOOGLE_CLIENT_ID, JOOBLE_API_KEY, OFFER_MAX_DAYS, SITE_URL, Application, Base, Company, DirectoryCompany, EmailCode,
-                       Job, Message, Notification, Review, SessionLocal, Setting, SpontaneousApplication, StudentCV,
+                       CompanyContact, Job, Message, Notification, Review, SessionLocal, Setting, SpontaneousApplication, StudentCV,
                        SavedJob, SavedSearch, StudentProfile, User, engine, get_db, utcnow)
 from .helpers import (check_signature, current_user, guess_sector, hash_password, login_response, mail_enabled, make_token,
                       match_job, notify, optional_user, read_token, require_role, send_email, send_mail, sign, verify_password)
@@ -1464,6 +1464,75 @@ def admin_companies(status: str = "", _: User = Depends(admin_only), db: Session
     if status:
         stmt = stmt.where(Company.verification_status == status)
     return [{**c.to_dict(private=True), "owner_email": c.owner.email if c.owner else "", "jobs": len(c.jobs)} for c in db.scalars(stmt)]
+
+
+# ----- Marrakech directory (admins see the private emails and can manage them)
+@app.get("/api/admin/directory")
+def admin_directory(q: str = "", show: str = "", page: int = 1, _: User = Depends(admin_only), db: Session = Depends(get_db)):
+    """show: "" all | "email" accepts applications | "noemail" no email | "optout" asked to stop."""
+    per_page, page = 30, max(1, page)
+    stmt = select(DirectoryCompany).outerjoin(CompanyContact)
+    if q.strip():
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(or_(DirectoryCompany.name.ilike(like), DirectoryCompany.category.ilike(like),
+                              DirectoryCompany.area.ilike(like), CompanyContact.email.ilike(like)))
+    if show == "email":
+        stmt = stmt.where(CompanyContact.id.is_not(None), CompanyContact.opted_out.is_(False))
+    elif show == "noemail":
+        stmt = stmt.where(CompanyContact.id.is_(None))
+    elif show == "optout":
+        stmt = stmt.where(CompanyContact.opted_out.is_(True))
+    total = db.scalar(select(func.count()).select_from(stmt.subquery()))
+    rows = db.scalars(stmt.order_by(DirectoryCompany.name).offset((page - 1) * per_page).limit(per_page)).all()
+    sent = dict(db.execute(select(SpontaneousApplication.directory_id, func.count()).where(
+        SpontaneousApplication.directory_id.in_([c.id for c in rows])).group_by(SpontaneousApplication.directory_id)).all())
+    items = [{**c.to_dict(), "email": c.contact.email if c.contact else "", "opted_out": bool(c.contact and c.contact.opted_out),
+              "applications": sent.get(c.id, 0)} for c in rows]
+    counts = {"all": db.scalar(select(func.count(DirectoryCompany.id))),
+              "email": db.scalar(select(func.count(CompanyContact.id)).where(CompanyContact.opted_out.is_(False))),
+              "optout": db.scalar(select(func.count(CompanyContact.id)).where(CompanyContact.opted_out.is_(True)))}
+    counts["noemail"] = counts["all"] - counts["email"] - counts["optout"]
+    return {"items": items, "total": total, "page": page, "pages": max(1, -(-total // per_page)), "counts": counts}
+
+
+class DirectoryEdit(BaseModel):
+    email: str | None = None       # "" removes the email
+    opted_out: bool | None = None  # true: stop sending applications to this company
+
+
+@app.put("/api/admin/directory/{company_id}")
+def admin_edit_directory(company_id: int, data: DirectoryEdit, _: User = Depends(admin_only), db: Session = Depends(get_db)):
+    company = db.get(DirectoryCompany, company_id)
+    if not company:
+        raise HTTPException(404, "Company not found.")
+    if data.email is not None:
+        email = data.email.strip().lower()
+        if email and not re.fullmatch(r"[\w.+-]+@[\w-]+(\.[\w-]+)+", email):
+            raise HTTPException(400, "This email address doesn't look valid.")
+        if not email:
+            if company.contact:
+                db.delete(company.contact)
+                company.contact = None
+        elif company.contact:
+            company.contact.email = email
+        else:
+            company.contact = CompanyContact(email=email)
+    if data.opted_out is not None and company.contact:
+        company.contact.opted_out = data.opted_out
+    db.commit()
+    db.refresh(company)
+    return {**company.to_dict(), "email": company.contact.email if company.contact else "",
+            "opted_out": bool(company.contact and company.contact.opted_out)}
+
+
+@app.delete("/api/admin/directory/{company_id}")
+def admin_delete_directory(company_id: int, _: User = Depends(admin_only), db: Session = Depends(get_db)):
+    company = db.get(DirectoryCompany, company_id)
+    if company:
+        db.execute(SpontaneousApplication.__table__.delete().where(SpontaneousApplication.directory_id == company_id))
+        db.delete(company)
+        db.commit()
+    return {"ok": True}
 
 
 class VerifyDecision(BaseModel):

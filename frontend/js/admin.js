@@ -191,6 +191,60 @@ async function loadCompanies() {
   } catch (err) { toast(err.message, "error"); }
 }
 
+// ------------------------------------------------- Marrakech directory (emails used for spontaneous applications)
+let dirPage = 1;
+async function loadDirectoryAdmin() {
+  try {
+    const qs = new URLSearchParams({ q: $("#dirQ").value.trim(), show: $("#dirShow").value, page: dirPage });
+    const d = await API.get(`/api/admin/directory?${qs}`);
+    $("#dirTotal").textContent = d.counts.all;
+    $$("#dirShow option").forEach((o) => { o.textContent = `${t(o.dataset.i18n)} (${d.counts[o.value || "all"]})`; });
+    $("#dirTable").innerHTML = d.items.map((c) => `
+      <tr>
+        <td><div class="cell-user">${companyLogo({ ...c, logo_color: "#2e9e74" }, "sm")}<div style="min-width:0;max-width:260px"><strong class="ellipsis" style="display:block" title="${esc(c.name)}">${esc(c.name)}</strong><div class="muted small">${esc(c.category || sectorLabel(c.sector))}${c.rating ? ` · ★ ${c.rating}` : ""}</div></div></div></td>
+        <td class="muted small"><div class="ellipsis" style="max-width:220px" title="${esc(c.area || c.city)}">${esc(c.area || c.city)}</div></td>
+        <td class="small">${c.email ? esc(c.email) : `<span class="muted">—</span>`}</td>
+        <td>${c.applications}</td>
+        <td>${!c.email ? `<span class="badge">${t("adm.dirNoEmailBadge")}</span>` : c.opted_out ? `<span class="badge badge-red">${t("adm.dirOptoutBadge")}</span>` : `<span class="badge badge-green">${t("adm.dirAcceptsBadge")}</span>`}</td>
+        <td><div class="actions">
+          <button class="btn btn-ghost btn-sm" data-edit="${c.id}" title="${esc(t("adm.dirEditEmail"))}">${icon("edit", 14)}</button>
+          ${c.email ? `<button class="btn btn-ghost btn-sm" data-optout="${c.id}" data-to="${!c.opted_out}">${t(c.opted_out ? "adm.dirResume" : "adm.dirStop")}</button>` : ""}
+          <button class="btn btn-danger btn-sm" data-del="${c.id}">${icon("trash", 14)}</button></div></td>
+      </tr>`).join("") || `<tr><td colspan="6" class="empty">${t("adm.noResults")}</td></tr>`;
+    const byId = Object.fromEntries(d.items.map((c) => [c.id, c]));
+    $$("#dirTable [data-edit]").forEach((b) => b.addEventListener("click", () => editDirectoryEmail(byId[b.dataset.edit])));
+    $$("#dirTable [data-optout]").forEach((b) => b.addEventListener("click", async () => {
+      try { await API.put(`/api/admin/directory/${b.dataset.optout}`, { opted_out: b.dataset.to === "true" }); loadDirectoryAdmin(); } catch (err) { toast(err.message, "error"); }
+    }));
+    $$("#dirTable [data-del]").forEach((b) => b.addEventListener("click", async () => {
+      if (!(await confirmDialog(t("adm.dirDeleteConfirm"), t("common.delete")))) return;
+      try { await API.del(`/api/admin/directory/${b.dataset.del}`); loadDirectoryAdmin(); } catch (err) { toast(err.message, "error"); }
+    }));
+    const el = $("#dirPages");
+    el.innerHTML = d.pages > 1 ? `<button ${d.page === 1 ? "disabled" : ""} data-p="${d.page - 1}">‹</button><button class="active">${d.page} / ${d.pages}</button><button ${d.page === d.pages ? "disabled" : ""} data-p="${d.page + 1}">›</button>` : "";
+    $$("button[data-p]", el).forEach((b) => b.addEventListener("click", () => { dirPage = +b.dataset.p; loadDirectoryAdmin(); }));
+  } catch (err) { toast(err.message, "error"); }
+}
+
+function editDirectoryEmail(c) {
+  modal({
+    title: c.name,
+    body: `<div class="field"><label for="dirEmail">${t("adm.dirEmailCol")}</label><input class="input" id="dirEmail" type="email" value="${esc(c.email)}" placeholder="contact@…"></div>
+      <p class="muted small" style="margin-top:10px">${t("adm.dirEmailHelp")}</p>`,
+    footer: `<button class="btn btn-ghost" data-close>${t("common.cancel")}</button><button class="btn btn-primary" id="dirSave">${t("profile.save")}</button>`,
+    onOpen: (el, close) => $("#dirSave", el).addEventListener("click", async () => {
+      try { await API.put(`/api/admin/directory/${c.id}`, { email: $("#dirEmail", el).value }); close(); loadDirectoryAdmin(); } catch (err) { toast(err.message, "error"); }
+    }),
+  });
+}
+
+const showCompanyView = (view) => {
+  $$("#coView button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  $("#coAccounts").classList.toggle("hidden", view !== "accounts");
+  $("#coDirectory").classList.toggle("hidden", view !== "directory");
+  (view === "directory" ? loadDirectoryAdmin : loadCompanies)();
+};
+
 // ----------------------------------------------------------------- Offers
 async function loadJobs() {
   try {
@@ -236,6 +290,9 @@ if (me) {
   $("#userQ").addEventListener("input", debounce(loadUsers));
   $("#userRole").addEventListener("change", loadUsers);
   $("#coStatus").addEventListener("change", loadCompanies);
+  $$("#coView button").forEach((b) => b.addEventListener("click", () => showCompanyView(b.dataset.view)));
+  $("#dirQ").addEventListener("input", debounce(() => { dirPage = 1; loadDirectoryAdmin(); }));
+  $("#dirShow").addEventListener("change", () => { dirPage = 1; loadDirectoryAdmin(); });
   $("#jobQ").addEventListener("input", debounce(loadJobs));
   panelRouter("analytics", { analytics: loadStats, users: loadUsers, companies: loadCompanies, jobs: loadJobs, reviews: loadReviews });
 }

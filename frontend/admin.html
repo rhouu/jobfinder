@@ -60,9 +60,30 @@
       </section>
 
       <section class="panel" id="panel-companies">
-        <div class="dash-head"><div><h1 data-i18n="nav.companies"></h1><p class="muted" data-i18n="adm.companiesSub"></p></div>
-          <select class="select" id="coStatus" style="width:auto"><option value="" data-i18n="adm.allStatuses"></option><option value="pending" selected data-i18n="verif.pending"></option><option value="verified" data-i18n="verif.verified"></option><option value="unverified" data-i18n="verif.unverified"></option><option value="rejected" data-i18n="verif.rejected"></option></select></div>
-        <div class="table-wrap"><table><thead><tr><th data-i18n="auth.company"></th><th data-i18n="adm.owner"></th><th>ICE / RC</th><th data-i18n="adm.offers"></th><th data-i18n="co.status"></th><th></th></tr></thead><tbody id="coTable"></tbody></table></div>
+        <div class="dash-head"><div><h1 data-i18n="nav.companies"></h1><p class="muted" data-i18n="adm.companiesSub2"></p></div>
+          <div class="view-switch" id="coView">
+            <button data-view="accounts" class="active" data-i18n="adm.accounts"></button>
+            <button data-view="directory"><span data-i18n="adm.directoryTab"></span> <span class="muted" id="dirTotal"></span></button>
+          </div></div>
+
+        <!-- Companies with an account (or from job boards) -->
+        <div id="coAccounts">
+          <div class="row" style="justify-content:flex-end;margin-bottom:12px">
+            <select class="select" id="coStatus" style="width:auto"><option value="" data-i18n="adm.allStatuses"></option><option value="pending" selected data-i18n="verif.pending"></option><option value="verified" data-i18n="verif.verified"></option><option value="unverified" data-i18n="verif.unverified"></option><option value="rejected" data-i18n="verif.rejected"></option></select></div>
+          <div class="table-wrap"><table><thead><tr><th data-i18n="auth.company"></th><th data-i18n="adm.owner"></th><th>ICE / RC</th><th data-i18n="adm.offers"></th><th data-i18n="co.status"></th><th></th></tr></thead><tbody id="coTable"></tbody></table></div>
+        </div>
+
+        <!-- Marrakech directory: private emails, spontaneous applications -->
+        <div id="coDirectory" class="hidden">
+          <div class="row" style="margin-bottom:12px">
+            <input class="input grow" id="dirQ" data-i18n-ph="adm.dirSearch">
+            <select class="select" id="dirShow" style="width:auto">
+              <option value="" data-i18n="adm.dirAll"></option><option value="email" data-i18n="adm.dirEmail"></option>
+              <option value="noemail" data-i18n="adm.dirNoEmail"></option><option value="optout" data-i18n="adm.dirOptout"></option></select>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th data-i18n="auth.company"></th><th data-i18n="adm.dirArea"></th><th data-i18n="adm.dirEmailCol"></th><th data-i18n="adm.dirApps"></th><th data-i18n="co.status"></th><th></th></tr></thead><tbody id="dirTable"></tbody></table></div>
+          <div class="pagination" id="dirPages"></div>
+        </div>
       </section>
 
       <section class="panel" id="panel-jobs">
