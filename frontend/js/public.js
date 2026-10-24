@@ -498,33 +498,91 @@ function jobPage() {
 }
 
 // ============================================================ Sign in / register / password / verification
-/** Sign-in page, left panel: real latest offers shown as a deck of cards that changes every few seconds, plus live numbers. */
-function authShowcase() {
-  const stack = $("#offerStack");
-  if (!stack) return;
-  API.get("/api/stats").then((s) => $$(".auth-stats [data-count]").forEach((el) => animateCount(el, s[el.dataset.count] || 0))).catch(() => {});
-  API.get("/api/jobs?per_page=8").then(({ items }) => {
-    if (!items.length) { stack.closest(".auth-show-inner").querySelector(".live-chip").remove(); stack.remove(); return; }
-    stack.innerHTML = items.map((j) => `<a class="offer-float" href="/job.html?id=${j.id}" tabindex="-1">${companyLogo(j.company, "sm")}
-      <span class="grow"><strong>${esc(j.title)}</strong><small>${esc(j.company.name)} · ${esc(j.city)}</small></span>${typeBadge(j.type)}</a>`).join("");
-    const cards = [...stack.children], n = cards.length;
-    let front = 0;
-    const place = () => cards.forEach((el, k) => {
-      const pos = (k - front + n) % n;
-      el.dataset.pos = pos < 3 ? pos : pos === n - 1 && n > 3 ? "out" : "hidden"; // the card that just left slides up and fades
+/** Sign-in page, left panel: four characters. Their eyes follow the mouse, they look at the field you type in,
+    look away while you type a password, and the tall one peeks when the password is shown. */
+function authCharacters() {
+  const scene = $("#chars");
+  if (!scene) return;
+  const chars = $$("[data-ch]", scene);
+  const pw = $("#password");
+  let mode = "follow", pointer = null, shown = false;
+
+  // Where the eyes should look: the mouse, the end of the text being typed, or away from the form
+  const lookAt = (x, y) => chars.forEach((ch) => {
+    const r = ch.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + Math.min(90, r.height / 3);
+    const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy) || 1;
+    ch.style.setProperty("--lean", `${Math.max(-8, Math.min(8, dx / 70)).toFixed(1)}deg`);
+    ch.style.setProperty("--fx", `${((dx / d) * 9).toFixed(1)}px`);
+    ch.style.setProperty("--fy", `${((dy / d) * 6).toFixed(1)}px`);
+    $$(".eye i", ch).forEach((pupil) => {
+      const m = pupil.parentElement.classList.contains("white") ? 4 : 2.5;
+      pupil.style.transform = `translate(${((dx / d) * m).toFixed(1)}px, ${((dy / d) * m).toFixed(1)}px)`;
     });
-    place();
-    if (n > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      let timer = setInterval(() => { front = (front + 1) % n; place(); }, 3200);
-      stack.addEventListener("mouseenter", () => clearInterval(timer)); // pause while the visitor looks at a card
-      stack.addEventListener("mouseleave", () => { timer = setInterval(() => { front = (front + 1) % n; place(); }, 3200); });
-    }
-  }).catch(() => {});
+  });
+  const measure = document.createElement("canvas").getContext("2d");
+  const caret = (input) => { // roughly where the text ends inside the field
+    const r = input.getBoundingClientRect(), cs = getComputedStyle(input);
+    measure.font = `${cs.fontSize} ${cs.fontFamily}`;
+    const text = input.type === "password" ? "•".repeat(input.value.length) : input.value;
+    return [Math.min(r.right - 16, r.left + 14 + measure.measureText(text).width), r.top + r.height / 2];
+  };
+  const formCentre = () => { const r = $(".auth-card:not(.hidden)")?.getBoundingClientRect(); return r ? [r.left + r.width / 2, r.top + 120] : [innerWidth * 0.75, innerHeight / 2]; };
+  const update = () => {
+    scene.classList.toggle("shy", mode === "shy" || mode === "peek");
+    scene.classList.toggle("peek", mode === "peek");
+    const field = document.activeElement;
+    if (mode === "shy" || mode === "peek") {
+      const r = scene.getBoundingClientRect();
+      lookAt(r.left - 300, r.top - 260); // look away, up and to the left
+      if (mode === "peek") { const ch = scene.querySelector(".ch-tall"), [x, y] = caret(pw); peekAt(ch, x, y); }
+    } else if (mode === "field" && field?.matches?.("input")) lookAt(...caret(field));
+    else if (pointer) lookAt(...pointer);
+    else lookAt(...formCentre());
+  };
+  const peekAt = (ch, x, y) => { // the tall one turns back to read the shown password
+    const r = ch.getBoundingClientRect(), dx = x - (r.left + r.width / 2), dy = y - (r.top + 80), d = Math.hypot(dx, dy) || 1;
+    ch.style.setProperty("--lean", "6deg");
+    ch.style.setProperty("--fx", `${((dx / d) * 12).toFixed(1)}px`);
+    ch.style.setProperty("--fy", `${((dy / d) * 6).toFixed(1)}px`);
+    $$(".eye i", ch).forEach((p) => (p.style.transform = `translate(${((dx / d) * 2.5).toFixed(1)}px, ${((dy / d) * 2.5).toFixed(1)}px)`));
+  };
+
+  document.addEventListener("pointermove", (e) => { pointer = [e.clientX, e.clientY]; if (mode === "follow") update(); }, { passive: true });
+  document.addEventListener("focusin", (e) => {
+    if (e.target === pw) mode = shown ? "peek" : "shy";
+    else if (e.target.matches("input:not([type=checkbox]):not([type=radio]), textarea")) mode = "field";
+    else return;
+    update();
+  });
+  document.addEventListener("focusout", () => setTimeout(() => { if (!document.activeElement?.matches?.("input, textarea")) { mode = "follow"; update(); } }));
+  document.addEventListener("input", (e) => { if (e.target.matches?.("input")) update(); });
+  addEventListener("resize", update);
+
+  // Show / hide the password (the tall one peeks while it is shown)
+  $("#pwEye")?.addEventListener("click", () => {
+    shown = !shown;
+    pw.type = shown ? "text" : "password";
+    $("#pwEye").innerHTML = icon(shown ? "eyeOff" : "eye", 18);
+    $("#pwEye").setAttribute("aria-label", t(shown ? "auth.hidePw" : "auth.showPw"));
+    pw.focus();
+    mode = shown ? "peek" : "shy";
+    update();
+  });
+
+  // Blinking, a little shake after a wrong password, a hop when signed in
+  chars.forEach((ch) => {
+    const blink = () => { ch.classList.add("blink"); setTimeout(() => ch.classList.remove("blink"), 160); setTimeout(blink, 2500 + Math.random() * 4000); };
+    setTimeout(blink, 800 + Math.random() * 3000);
+  });
+  const play = (cls, ms) => { scene.classList.remove(cls); void scene.offsetWidth; scene.classList.add(cls); setTimeout(() => scene.classList.remove(cls), ms); };
+  window.authCharsSad = () => play("sad", 700);
+  window.authCharsHappy = () => play("happy", 900);
+  update();
 }
 
 function authPage() {
   initPage({ footer: false, chat: false });
-  authShowcase();
+  authCharacters();
   const p = params();
   const next = p.next && p.next.startsWith("/") && !p.next.startsWith("//") ? p.next : null;
   const cards = ["mainCard", "forgotCard", "resetCard", "verifyCard", "codeCard"];
@@ -532,6 +590,7 @@ function authPage() {
 
   const done = (data) => {
     if (data.needs_code) return askCode(data.email);
+    window.authCharsHappy?.();
     Auth.save(data);
     toast(t("auth.welcome", { name: data.user.name.split(" ")[0] }, true), "success");
     setTimeout(() => location.replace(next || Auth.home(data.user.role)), 400);
@@ -594,7 +653,7 @@ function authPage() {
         done(mode === "register"
           ? await API.post("/api/auth/register", { name: f.name, email: f.email, password: f.password, role: role(), company_name: f.company_name || null, language: LANG })
           : await API.post("/api/auth/login", { email: f.email, password: f.password }));
-      } catch (err) { toast(err.message, "error"); }
+      } catch (err) { toast(err.message, "error"); window.authCharsSad?.(); }
     });
   });
 
