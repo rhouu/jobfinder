@@ -221,8 +221,17 @@ async function loadDirectoryAdmin() {
       try { await API.del(`/api/admin/directory/${b.dataset.del}`); loadDirectoryAdmin(); } catch (err) { toast(err.message, "error"); }
     }));
     const el = $("#dirPages");
-    el.innerHTML = d.pages > 1 ? `<button ${d.page === 1 ? "disabled" : ""} data-p="${d.page - 1}">‹</button><button class="active">${d.page} / ${d.pages}</button><button ${d.page === d.pages ? "disabled" : ""} data-p="${d.page + 1}">›</button>` : "";
-    $$("button[data-p]", el).forEach((b) => b.addEventListener("click", () => { dirPage = +b.dataset.p; loadDirectoryAdmin(); }));
+    let html = "";
+    if (d.pages > 1) { // ‹ 1 … 4 5 6 … 22 ›, like the other pages
+      html = `<button ${d.page === 1 ? "disabled" : ""} data-p="${d.page - 1}">‹</button>`;
+      for (let n = 1; n <= d.pages; n++) {
+        if (n === 1 || n === d.pages || Math.abs(n - d.page) <= 1) html += `<button class="${n === d.page ? "active" : ""}" data-p="${n}">${n}</button>`;
+        else if (Math.abs(n - d.page) === 2) html += "<button disabled>…</button>";
+      }
+      html += `<button ${d.page === d.pages ? "disabled" : ""} data-p="${d.page + 1}">›</button>`;
+    }
+    el.innerHTML = html;
+    $$("button[data-p]", el).forEach((b) => b.addEventListener("click", () => { dirPage = +b.dataset.p; loadDirectoryAdmin(); scrollToTop(true); }));
   } catch (err) { toast(err.message, "error"); }
 }
 
