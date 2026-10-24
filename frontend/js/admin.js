@@ -151,12 +151,14 @@ function insPlot(id, data, layout = {}) {
   const axis = { gridcolor: th.border, linecolor: th.border, zerolinecolor: th.border, tickfont: { color: th.muted }, title: { font: { color: th.muted, size: 12 } } };
   const merge = (a) => ({ ...axis, ...(layout[a] || {}), title: { ...axis.title, ...((layout[a] || {}).title || {}) } });
   if (el.dataset.empty) { el.innerHTML = ""; delete el.dataset.empty; }
-  Plotly.react(el, data, {
+  // the map is redrawn from scratch: updating it while its tiles still load throws "Style is not done loading"
+  if (layout.mapbox) Plotly.purge(el);
+  (layout.mapbox ? Plotly.newPlot : Plotly.react)(el, data, {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { family: "Nunito Sans, sans-serif", color: th.text, size: 12 },
     margin: { l: 52, r: 16, t: 34, b: 52 }, hoverlabel: { bgcolor: th.surface, bordercolor: th.border, font: { color: th.text } },
     legend: { orientation: "h", x: 0, xanchor: "left", y: 1.02, yanchor: "bottom", font: { color: th.muted } }, ...layout, xaxis: merge("xaxis"), yaxis: merge("yaxis"),
   }, { displaylogo: false, responsive: true, scrollZoom: false, // the mouse wheel scrolls the page, not the chart
-    modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d", "toggleSpikelines"] });
+    modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d", "toggleSpikelines"] }).catch(() => {});
 }
 
 function insEmpty(id, key) {

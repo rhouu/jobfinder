@@ -131,6 +131,7 @@ const ICON_PATHS = {
   award: '<circle cx="12" cy="9" r="6"/><path d="m8.5 14-1.5 7 5-3 5 3-1.5-7"/>',
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   check: '<path d="m5 12 5 5 9-10"/>',
+  chevron: '<path d="m6 9 6 6 6-6"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5zM3 13l9 5 9-5"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/>',
@@ -213,6 +214,110 @@ function bindJobCards(root = document) {
   });
   animateRings(root);
 }
+
+// ============================================================ Dropdowns in the site's style
+/* The list a browser opens for a <select> can't be styled, so each select.select gets a button + list drawn by us.
+   The real <select> stays (hidden) and keeps the value: forms, filters and "change" listeners work as before. */
+const nativeSelectValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+const nativeSelectIndex = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "selectedIndex");
+
+function enhanceSelect(sel) {
+  if (sel.dataset.cselect || sel.multiple) return;
+  sel.dataset.cselect = "1";
+  const wrap = document.createElement("div");
+  wrap.className = "cselect" + (sel.style.width === "auto" ? " inline" : "");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "select cselect-btn";
+  btn.style.cssText = sel.style.cssText;
+  btn.setAttribute("aria-haspopup", "listbox");
+  btn.setAttribute("aria-expanded", "false");
+  if (sel.id) {
+    btn.id = sel.id + "-btn";
+    document.querySelectorAll(`label[for="${sel.id}"]`).forEach((l) => l.setAttribute("for", btn.id));
+  }
+  const menu = document.createElement("div");
+  menu.className = "cselect-menu";
+  menu.setAttribute("role", "listbox");
+  menu.setAttribute("data-lenis-prevent", ""); // the mouse wheel scrolls the list, not the page
+  sel.parentNode.insertBefore(wrap, sel);
+  wrap.append(sel, btn, menu);
+  sel.classList.add("cselect-native");
+  sel.tabIndex = -1;
+
+  const items = () => [...menu.querySelectorAll(".cselect-opt:not([disabled])")];
+  const refresh = () => {
+    const opt = sel.options[sel.selectedIndex];
+    btn.innerHTML = `<span class="cselect-label">${esc(opt ? opt.textContent : "")}</span>${icon("chevron", 16)}`;
+    btn.disabled = sel.disabled;
+    menu.querySelectorAll(".cselect-opt").forEach((o) => o.setAttribute("aria-selected", String(+o.dataset.i === sel.selectedIndex)));
+  };
+  const build = () => {
+    menu.innerHTML = [...sel.options].map((o, i) => `<button type="button" class="cselect-opt" role="option" data-i="${i}" ${o.disabled ? "disabled" : ""}>
+      <span>${esc(o.textContent)}</span>${icon("check", 15)}</button>`).join("");
+    if (wrap.classList.contains("inline")) { // keep the button the same width whatever is chosen
+      const longest = Math.max(4, ...[...sel.options].map((o) => o.textContent.length));
+      btn.style.minWidth = `min(320px, calc(${longest}ch + 52px))`;
+    }
+    refresh();
+  };
+  const close = () => { wrap.classList.remove("open", "up"); btn.setAttribute("aria-expanded", "false"); };
+  const open = () => {
+    document.querySelectorAll(".cselect.open").forEach((w) => w !== wrap && w.classList.remove("open"));
+    wrap.classList.add("open");
+    btn.setAttribute("aria-expanded", "true");
+    const below = window.innerHeight - btn.getBoundingClientRect().bottom;
+    wrap.classList.toggle("up", below < Math.min(320, menu.scrollHeight) + 16 && btn.getBoundingClientRect().top > below);
+    const current = menu.querySelector('[aria-selected="true"]') || items()[0];
+    current?.focus();
+    current?.scrollIntoView({ block: "nearest" });
+  };
+  const choose = (i) => {
+    if (i !== sel.selectedIndex) {
+      nativeSelectIndex.set.call(sel, i);
+      sel.dispatchEvent(new Event("input", { bubbles: true }));
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    refresh();
+    close();
+    btn.focus();
+  };
+
+  btn.addEventListener("click", () => (wrap.classList.contains("open") ? close() : open()));
+  btn.addEventListener("keydown", (e) => { if (["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) { e.preventDefault(); open(); } });
+  menu.addEventListener("click", (e) => { const o = e.target.closest(".cselect-opt"); if (o && !o.disabled) choose(+o.dataset.i); });
+  menu.addEventListener("keydown", (e) => {
+    const list = items(), at = list.indexOf(document.activeElement);
+    const go = (n) => { e.preventDefault(); list[Math.max(0, Math.min(list.length - 1, n))]?.focus(); };
+    if (e.key === "ArrowDown") go(at + 1);
+    else if (e.key === "ArrowUp") go(at - 1);
+    else if (e.key === "Home") go(0);
+    else if (e.key === "End") go(list.length - 1);
+    else if (e.key === "Escape") { e.preventDefault(); close(); btn.focus(); }
+    else if (e.key === "Tab") close();
+    else if (e.key.length === 1) { // jump to the first option starting with that letter
+      const hit = list.find((o, k) => k > at && o.textContent.trim().toLowerCase().startsWith(e.key.toLowerCase()))
+        || list.find((o) => o.textContent.trim().toLowerCase().startsWith(e.key.toLowerCase()));
+      hit?.focus();
+    }
+  });
+  // Options added later (cities, offers, translations) and values set by code keep the button up to date
+  new MutationObserver(build).observe(sel, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["disabled"] });
+  Object.defineProperty(sel, "value", { configurable: true, get() { return nativeSelectValue.get.call(this); }, set(v) { nativeSelectValue.set.call(this, v); refresh(); } });
+  Object.defineProperty(sel, "selectedIndex", { configurable: true, get() { return nativeSelectIndex.get.call(this); }, set(v) { nativeSelectIndex.set.call(this, v); refresh(); } });
+  sel.addEventListener("change", refresh);
+  sel.form?.addEventListener("reset", () => setTimeout(refresh));
+  build();
+}
+
+function enhanceSelects(root = document) {
+  root.querySelectorAll("select.select").forEach(enhanceSelect);
+}
+document.addEventListener("click", (e) => { if (!e.target.closest(".cselect")) document.querySelectorAll(".cselect.open").forEach((w) => w.classList.remove("open", "up")); });
+// Dropdowns that appear later (dialogs, forms drawn by JavaScript) are upgraded too
+new MutationObserver((records) => {
+  if (records.some((r) => [...r.addedNodes].some((n) => n.nodeType === 1 && (n.matches?.("select.select") || n.querySelector?.("select.select:not([data-cselect])"))))) enhanceSelects();
+}).observe(document.documentElement, { childList: true, subtree: true });
 
 function toast(message, type = "info") {
   let box = $(".toasts");
@@ -480,6 +585,7 @@ function enablePageTransitions() {
 function initPage({ active = "", footer = true, chat = true } = {}) {
   translatePage();
   hydrateIcons();
+  enhanceSelects();
   enablePageTransitions();
   renderNav(active);
   if (footer) renderFooter();
