@@ -498,8 +498,33 @@ function jobPage() {
 }
 
 // ============================================================ Sign in / register / password / verification
+/** Sign-in page, left panel: real latest offers shown as a deck of cards that changes every few seconds, plus live numbers. */
+function authShowcase() {
+  const stack = $("#offerStack");
+  if (!stack) return;
+  API.get("/api/stats").then((s) => $$(".auth-stats [data-count]").forEach((el) => animateCount(el, s[el.dataset.count] || 0))).catch(() => {});
+  API.get("/api/jobs?per_page=8").then(({ items }) => {
+    if (!items.length) { stack.closest(".auth-show-inner").querySelector(".live-chip").remove(); stack.remove(); return; }
+    stack.innerHTML = items.map((j) => `<a class="offer-float" href="/job.html?id=${j.id}" tabindex="-1">${companyLogo(j.company, "sm")}
+      <span class="grow"><strong>${esc(j.title)}</strong><small>${esc(j.company.name)} · ${esc(j.city)}</small></span>${typeBadge(j.type)}</a>`).join("");
+    const cards = [...stack.children], n = cards.length;
+    let front = 0;
+    const place = () => cards.forEach((el, k) => {
+      const pos = (k - front + n) % n;
+      el.dataset.pos = pos < 3 ? pos : pos === n - 1 && n > 3 ? "out" : "hidden"; // the card that just left slides up and fades
+    });
+    place();
+    if (n > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      let timer = setInterval(() => { front = (front + 1) % n; place(); }, 3200);
+      stack.addEventListener("mouseenter", () => clearInterval(timer)); // pause while the visitor looks at a card
+      stack.addEventListener("mouseleave", () => { timer = setInterval(() => { front = (front + 1) % n; place(); }, 3200); });
+    }
+  }).catch(() => {});
+}
+
 function authPage() {
   initPage({ footer: false, chat: false });
+  authShowcase();
   const p = params();
   const next = p.next && p.next.startsWith("/") && !p.next.startsWith("//") ? p.next : null;
   const cards = ["mainCard", "forgotCard", "resetCard", "verifyCard", "codeCard"];

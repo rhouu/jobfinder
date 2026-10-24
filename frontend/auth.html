@@ -11,13 +11,23 @@
   <script src="/js/i18n.js"></script>
 </head>
 <body data-page="auth">
-  <!-- Background photo for the whole page: Vitaly Gariev on Unsplash -->
-  <main class="auth-wrap photo-bg" style="--photo:url('https://images.unsplash.com/photo-1758270705290-62b6294dd044?auto=format&fit=crop&w=1920&q=65')">
-    <section class="auth-side">
-      <span class="eyebrow fade-up"><span class="dot"></span> <span data-i18n="home.copilot"></span></span>
-      <h2 class="fade-up" style="--d:.1s" data-i18n-html="auth.sideTitle"></h2>
-      <p class="muted fade-up" style="--d:.2s;max-width:440px;font-size:1.05rem" data-i18n="auth.sideSub"></p>
-      <ul class="check-list fade-up" style="--d:.3s"><li data-i18n="auth.p1"></li><li data-i18n="auth.p2"></li><li data-i18n="auth.p3"></li></ul>
+  <main class="auth-wrap auth-v2">
+    <!-- Left: animated green panel (moving light blobs, latest offers changing every few seconds, live numbers) -->
+    <section class="auth-side auth-show">
+      <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
+      <div class="auth-show-inner">
+        <span class="eyebrow fade-up"><span class="dot"></span> <span data-i18n="home.copilot"></span></span>
+        <h2 class="fade-up" style="--d:.1s" data-i18n-html="auth.sideTitle"></h2>
+        <p class="fade-up" style="--d:.2s" data-i18n="auth.sideSub"></p>
+        <ul class="check-list fade-up" style="--d:.3s"><li data-i18n="auth.p1"></li><li data-i18n="auth.p2"></li><li data-i18n="auth.p3"></li></ul>
+        <div class="live-chip fade-up" style="--d:.35s"><span class="pulse"></span><span data-i18n="auth.liveOffers"></span></div>
+        <div class="offer-stack fade-up" style="--d:.4s" id="offerStack" aria-live="polite"></div>
+        <div class="auth-stats fade-up" style="--d:.5s">
+          <div><b data-count="jobs">0</b><span data-i18n="auth.statOffers"></span></div>
+          <div><b data-count="directory">0</b><span data-i18n="auth.statCompanies"></span></div>
+          <div><b data-count="cities">0</b><span data-i18n="auth.statCities"></span></div>
+        </div>
+      </div>
     </section>
 
     <section class="auth-form-wrap">
@@ -39,7 +49,7 @@
           <div class="field"><label for="email" data-i18n="auth.email"></label><input class="input" id="email" name="email" type="email" autocomplete="email" placeholder="you@example.ma"></div>
           <div class="field"><label for="password" data-i18n="auth.password"></label><input class="input" id="password" name="password" type="password" autocomplete="current-password">
             <small class="muted hidden" data-only="register" data-i18n="auth.pwHint"></small></div>
-          <button class="btn btn-primary btn-lg btn-block" type="submit" id="submitBtn"></button>
+          <button class="btn btn-primary btn-lg btn-block btn-shine" type="submit" id="submitBtn"></button>
           <p class="muted small hidden consent" data-only="register" data-i18n-html="auth.consent"></p>
           <button type="button" class="link-btn" id="forgotLink" data-i18n="auth.forgot"></button>
         </form>

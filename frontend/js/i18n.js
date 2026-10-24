@@ -387,6 +387,10 @@ const T = {
   "reviews.thanks": ["Thank you for your review!", "Merci pour votre avis !", "شكرًا على رأيك!"],
 
   // ---------------------------------------------------------------- sign in / register
+  "auth.liveOffers": ["Latest offers right now", "Les dernières offres en ce moment", "أحدث العروض الآن"],
+  "auth.statOffers": ["open offers", "offres ouvertes", "عرض متاح"],
+  "auth.statCompanies": ["companies", "entreprises", "شركة"],
+  "auth.statCities": ["cities", "villes", "مدن"],
   "auth.sideTitle": ["Your career in Morocco <span class=\"grad-text\">starts here.</span>", "Votre carrière au Maroc <span class=\"grad-text\">commence ici.</span>", "مسارك المهني في المغرب <span class=\"grad-text\">يبدأ هنا.</span>"],
   "auth.sideSub": ["Find internships, PFE and first jobs at verified companies.", "Trouvez stages, PFE et premiers emplois dans des entreprises vérifiées.", "اعثر على تداريب ومشاريع تخرج وأول وظيفة في شركات موثّقة."],
   "auth.p1": ["AI CV, cover letter, portfolio and mock interviews", "CV, lettre, portfolio et entretiens avec l'IA", "سيرة ذاتية ورسالة وموقع ومقابلات بالذكاء الاصطناعي"],
