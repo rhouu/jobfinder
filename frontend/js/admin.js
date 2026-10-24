@@ -134,6 +134,200 @@ $("#backupBtn").addEventListener("click", (e) => withLoading(e.currentTarget, as
   } catch (err) { toast(err.message, "error"); }
 }));
 
+// ------------------------------------------------- Data analysis: the chart types of the M202 course, on the platform's data
+// Charts are drawn with Plotly (like the course). Filters at the top work like a Dash dropdown: every chart redraws.
+const INS_PAL = ["#2e9e74", "#4f7fe0", "#d9663f", "#8b6fd6", "#b8790a", "#1597b8"]; // checked for colour-blind safety
+const INS_OTHER = "#9a95a3";
+const TYPE_COLORS = { CDI: INS_PAL[0], CDD: INS_PAL[1], Stage: INS_PAL[2], PFE: INS_PAL[3], Alternance: INS_PAL[4], Freelance: INS_PAL[5] };
+let insData = null, sectorColor = {};
+
+const insTheme = () => {
+  const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue(n).trim();
+  return { text: v("--text"), muted: v("--muted"), border: v("--border"), surface: v("--surface") };
+};
+
+function insPlot(id, data, layout = {}) {
+  const th = insTheme(), el = $("#" + id);
+  const axis = { gridcolor: th.border, linecolor: th.border, zerolinecolor: th.border, tickfont: { color: th.muted }, title: { font: { color: th.muted, size: 12 } } };
+  const merge = (a) => ({ ...axis, ...(layout[a] || {}), title: { ...axis.title, ...((layout[a] || {}).title || {}) } });
+  if (el.dataset.empty) { el.innerHTML = ""; delete el.dataset.empty; }
+  Plotly.react(el, data, {
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { family: "Nunito Sans, sans-serif", color: th.text, size: 12 },
+    margin: { l: 52, r: 16, t: 34, b: 52 }, hoverlabel: { bgcolor: th.surface, bordercolor: th.border, font: { color: th.text } },
+    legend: { orientation: "h", x: 0, xanchor: "left", y: 1.02, yanchor: "bottom", font: { color: th.muted } }, ...layout, xaxis: merge("xaxis"), yaxis: merge("yaxis"),
+  }, { displaylogo: false, responsive: true, scrollZoom: false, // the mouse wheel scrolls the page, not the chart
+    modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d", "toggleSpikelines"] });
+}
+
+function insEmpty(id, key) {
+  const el = $("#" + id);
+  if (window.Plotly) Plotly.purge(el);
+  el.dataset.empty = "1";
+  el.innerHTML = `<div class="chart-empty">${icon("chart", 28)}<p>${t(key)}</p></div>`;
+}
+
+// last n weeks (Monday start) and how many dated rows fall in each
+function insWeeks(n = 12) {
+  const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return Array.from({ length: n }, (_, i) => new Date(d.getTime() - (n - 1 - i) * 7 * 864e5));
+}
+const insPerWeek = (rows, weeks) => weeks.map((w, i) => rows.filter((r) => {
+  const at = new Date(r.created_at); return at >= w && (i === weeks.length - 1 || at < weeks[i + 1]);
+}).length);
+const insWeekLabel = (w) => w.toLocaleDateString(LOCALE, { day: "numeric", month: "short" });
+const insCount = (rows, key) => rows.reduce((m, r) => ((m[r[key]] = (m[r[key]] || 0) + 1), m), {});
+const insTop = (counts, n) => Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => k);
+const insKm = (lat, lng) => { // distance to the centre of Marrakech (Jemaa el-Fna)
+  const r = Math.PI / 180, dLat = (lat - 31.6258) * r, dLng = (lng + 7.9892) * r;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(31.6258 * r) * Math.cos(lat * r) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(a));
+};
+
+async function loadInsights() {
+  if (!window.Plotly) { $("#insGrid").innerHTML = `<div class="card empty">${t("ins.noLib")}</div>`; return; }
+  try { insData = await API.get("/api/admin/insights"); } catch (err) { toast(err.message, "error"); return; }
+  const d = insData;
+  // Fixed colour per sector (most common sectors in the directory), so a sector keeps its colour in every chart
+  sectorColor = Object.fromEntries(insTop(insCount(d.directory, "sector"), 5).map((s, i) => [s, INS_PAL[i]]));
+  const sectors = insTop(insCount([...d.directory, ...d.jobs], "sector"), 20);
+  const cities = insTop(insCount(d.jobs, "city"), 20);
+  const keep = (sel, opts, all) => { const v = sel.value; sel.innerHTML = `<option value="">${t(all)}</option>` + opts; sel.value = v; };
+  keep($("#insSector"), sectors.map((s) => `<option value="${s}">${esc(sectorLabel(s))}</option>`).join(""), "ins.allSectors");
+  keep($("#insCity"), cities.map((c) => `<option>${esc(c)}</option>`).join(""), "common.allCities");
+  drawInsights();
+}
+
+function drawInsights() {
+  const d = insData, sector = $("#insSector").value, city = $("#insCity").value, th = insTheme();
+  const dir = d.directory.filter((c) => !sector || c.sector === sector);
+  const rated = dir.filter((c) => c.rating);
+  const jobs = d.jobs.filter((j) => (!sector || j.sector === sector) && (!city || j.city === city));
+  const open = jobs.filter((j) => j.status === "open");
+  const colorOf = (s) => sectorColor[s] || INS_OTHER;
+  const groupOf = (s) => (sectorColor[s] ? sectorLabel(s) : t("ins.other"));
+  $("#insSummary").textContent = t("ins.summary", { c: dir.length, o: open.length });
+
+  // 1. Histogram: distribution of company ratings
+  if (rated.length) insPlot("chHist", [{ type: "histogram", x: rated.map((c) => c.rating), xbins: { start: 1, end: 5.01, size: 0.25 },
+    marker: { color: INS_PAL[0], line: { color: th.surface, width: 2 } }, hovertemplate: `%{x} ★<br>%{y} ${t("ins.companies")}<extra></extra>` }],
+    { xaxis: { title: { text: t("ins.rating") } }, yaxis: { title: { text: t("ins.mCompanies") } }, bargap: 0.04 });
+  else insEmpty("chHist", "ins.noData");
+
+  // 2. Grouped bars: open offers per city, internships vs jobs
+  const topCities = insTop(insCount(open, "city"), 8);
+  if (topCities.length) {
+    const isInt = (j) => j.type === "Stage" || j.type === "PFE";
+    insPlot("chBars", [
+      { type: "bar", name: t("nav.internships"), x: topCities, y: topCities.map((c) => open.filter((j) => j.city === c && isInt(j)).length), marker: { color: INS_PAL[2] } },
+      { type: "bar", name: t("ins.jobs"), x: topCities, y: topCities.map((c) => open.filter((j) => j.city === c && !isInt(j)).length), marker: { color: INS_PAL[0] } },
+    ], { barmode: "group", bargap: 0.3, bargroupgap: 0.08, yaxis: { title: { text: t("ins.offers") } } });
+  } else insEmpty("chBars", "ins.noData");
+
+  // 3. Pie (donut): share of each contract type
+  const types = insCount(jobs, "type");
+  if (jobs.length) insPlot("chPie", [{ type: "pie", hole: 0.55, sort: false, labels: Object.keys(types), values: Object.values(types),
+    marker: { colors: Object.keys(types).map((k) => TYPE_COLORS[k] || INS_OTHER), line: { color: th.surface, width: 2 } },
+    textinfo: "label+percent", textfont: { color: "#fff" }, hovertemplate: `%{label}: %{value} ${t("ins.offers")}<extra></extra>` }],
+    { margin: { l: 10, r: 10, t: 10, b: 10 }, showlegend: false });
+  else insEmpty("chPie", "ins.noData");
+
+  // 4. Line: sign-ups and applications per week
+  const weeks = insWeeks(12), labels = weeks.map(insWeekLabel);
+  const signups = insPerWeek(d.users, weeks), apps = insPerWeek(d.applications, weeks);
+  insPlot("chLine", [
+    { type: "scatter", mode: "lines+markers", name: t("ins.signups"), x: labels, y: signups, line: { color: INS_PAL[0], width: 2 }, marker: { size: 8 } },
+    { type: "scatter", mode: "lines+markers", name: t("nav.applications"), x: labels, y: apps, line: { color: INS_PAL[3], width: 2 }, marker: { size: 8 } },
+  ], { yaxis: { title: { text: t("ins.perWeek") }, rangemode: "tozero" } });
+
+  // 5. Scatter: rating vs number of reviews
+  if (rated.length) insPlot("chScatter", [true, false].map((acc, i) => {
+    const pts = rated.filter((c) => c.accepts === acc);
+    return { type: "scatter", mode: "markers", name: t(acc ? "ins.acceptsApps" : "ins.noEmail"), x: pts.map((c) => c.reviews + 1), y: pts.map((c) => c.rating),
+      text: pts.map((c) => c.name), marker: { color: acc ? INS_PAL[0] : INS_PAL[1], size: 8, opacity: 0.75, line: { color: th.surface, width: 1 } },
+      hovertemplate: `<b>%{text}</b><br>%{y} ★ · %{x} ${t("ins.reviews")}<extra></extra>` };
+  }), { xaxis: { type: "log", title: { text: t("ins.reviewsLog") } }, yaxis: { title: { text: t("ins.rating") }, range: [0.8, 5.2] } });
+  else insEmpty("chScatter", "ins.noData");
+
+  // 6. Heatmap: offers per sector and city
+  const hmCities = insTop(insCount(d.jobs, "city"), 8), hmSectors = insTop(insCount(d.jobs, "sector"), 8);
+  if (hmCities.length) insPlot("chHeat", [{ type: "heatmap", x: hmCities, y: hmSectors.map(sectorLabel),
+    z: hmSectors.map((s) => hmCities.map((c) => d.jobs.filter((j) => j.sector === s && j.city === c).length)),
+    colorscale: [[0, "#f1f8f4"], [0.35, "#9fd6bd"], [1, "#1f6b4f"]], texttemplate: "%{z}", hovertemplate: `%{y} · %{x}: %{z} ${t("ins.offers")}<extra></extra>`,
+    xgap: 2, ygap: 2, colorbar: { thickness: 10, outlinewidth: 0, tickfont: { color: th.muted } } }],
+    { margin: { l: 140, r: 16, t: 8, b: 48 }, xaxis: { gridcolor: "rgba(0,0,0,0)" }, yaxis: { gridcolor: "rgba(0,0,0,0)", automargin: true } });
+  else insEmpty("chHeat", "ins.noData");
+
+  // 7. Box plot: ratings per sector
+  const boxSectors = insTop(insCount(d.directory.filter((c) => c.rating), "sector"), 6);
+  insPlot("chBox", boxSectors.map((s) => ({ type: "box", name: sectorLabel(s), y: d.directory.filter((c) => c.sector === s && c.rating).map((c) => c.rating),
+    marker: { color: colorOf(s), size: 4 }, line: { width: 1.5 }, boxpoints: "outliers" })),
+    { showlegend: false, yaxis: { title: { text: t("ins.rating") }, range: [0.8, 5.2] } });
+
+  // 8. Radar: the 4 biggest sectors compared on 5 measures (each scaled to 100 = best of the 4)
+  const radarSectors = insTop(insCount(d.directory, "sector"), 4);
+  const raw = radarSectors.map((s) => {
+    const cs = d.directory.filter((c) => c.sector === s), r = cs.filter((c) => c.rating);
+    return [cs.length, r.length ? r.reduce((a, c) => a + c.rating, 0) / r.length : 0, cs.reduce((a, c) => a + c.reviews, 0) / (cs.length || 1),
+      (100 * cs.filter((c) => c.accepts).length) / (cs.length || 1), d.jobs.filter((j) => j.sector === s && j.status === "open").length];
+  });
+  const maxes = [0, 1, 2, 3, 4].map((i) => Math.max(...raw.map((r) => r[i]), 1e-9));
+  const axes = ["ins.mCompanies", "ins.mRating", "ins.mReviews", "ins.mAccepts", "ins.mOffers"].map((k) => t(k));
+  insPlot("chRadar", radarSectors.map((s, n) => ({ type: "scatterpolar", fill: "toself", name: sectorLabel(s), r: [...raw[n].map((v, i) => Math.round((100 * v) / maxes[i])), Math.round((100 * raw[n][0]) / maxes[0])],
+    theta: [...axes, axes[0]], line: { color: colorOf(s), width: 2 }, fillcolor: colorOf(s), opacity: 0.55,
+    hovertemplate: `${sectorLabel(s)} · %{theta}: %{r}/100<extra></extra>` })),
+    { polar: { bgcolor: "rgba(0,0,0,0)", radialaxis: { range: [0, 100], gridcolor: th.border, linecolor: th.border, showticklabels: false },
+      angularaxis: { gridcolor: th.border, linecolor: th.border, tickfont: { color: th.text } } }, margin: { l: 60, r: 60, t: 24, b: 50 },
+    legend: { orientation: "h", x: 0.5, xanchor: "center", y: -0.08, yanchor: "top", font: { color: th.muted } } });
+
+  // 9. Combined chart: offers published (bars) and applications (line) per week, on one scale
+  insPlot("chCombo", [
+    { type: "bar", name: t("ins.published"), x: labels, y: insPerWeek(jobs, weeks), marker: { color: INS_PAL[0] }, opacity: 0.85 },
+    { type: "scatter", mode: "lines+markers", name: t("nav.applications"), x: labels, y: insPerWeek(d.applications, weeks), line: { color: INS_PAL[2], width: 2 }, marker: { size: 8 } },
+  ], { bargap: 0.35, yaxis: { title: { text: t("ins.perWeek") }, rangemode: "tozero" } });
+
+  // 10. Map: directory companies in Marrakech, coloured by sector, sized by number of reviews
+  const located = dir.filter((c) => c.lat && c.lng);
+  if (located.length) {
+    const groups = {};
+    located.forEach((c) => (groups[groupOf(c.sector)] = groups[groupOf(c.sector)] || { color: colorOf(c.sector), rows: [] }).rows.push(c));
+    insPlot("chMap", Object.entries(groups).map(([name, g]) => ({ type: "scattermapbox", name, lat: g.rows.map((c) => c.lat), lon: g.rows.map((c) => c.lng),
+      text: g.rows.map((c) => `${c.name}${c.rating ? ` · ${c.rating} ★` : ""}`), marker: { color: g.color, size: g.rows.map((c) => Math.min(22, 7 + Math.sqrt(c.reviews) / 3)), opacity: 0.8 },
+      hovertemplate: "%{text}<extra></extra>" })),
+      { mapbox: { style: "open-street-map", center: { lat: 31.635, lon: -8.0 }, zoom: 11 }, margin: { l: 0, r: 0, t: 30, b: 0 } });
+  } else insEmpty("chMap", "ins.noData");
+
+  // 11. Network: sectors linked to the cities where they publish offers (line width = number of offers)
+  const links = {};
+  d.jobs.forEach((j) => { const k = `${j.sector}|${j.city}`; links[k] = (links[k] || 0) + 1; });
+  const nSectors = insTop(insCount(d.jobs, "sector"), 8), nCities = insTop(insCount(d.jobs, "city"), 8);
+  if (nSectors.length) {
+    const ys = (n, i) => (n === 1 ? 0.5 : i / (n - 1));
+    const pos = Object.fromEntries([...nSectors.map((s, i) => [`s:${s}`, [0, ys(nSectors.length, i)]]), ...nCities.map((c, i) => [`c:${c}`, [1, ys(nCities.length, i)]])]);
+    const edges = Object.entries(links).map(([k, n]) => [k.split("|"), n]).filter(([[s, c]]) => pos[`s:${s}`] && pos[`c:${c}`]);
+    const total = (key, list) => list.filter((j) => key(j)).length;
+    insPlot("chNet", [
+      ...edges.map(([[s, c], n]) => ({ type: "scatter", mode: "lines", x: [0, 1], y: [pos[`s:${s}`][1], pos[`c:${c}`][1]], line: { color: colorOf(s), width: 1 + n * 1.2 },
+        opacity: 0.45, hoverinfo: "text", text: `${sectorLabel(s)} → ${c}: ${n}`, showlegend: false })),
+      { type: "scatter", mode: "markers+text", x: nSectors.map(() => 0), y: nSectors.map((s, i) => ys(nSectors.length, i)), text: nSectors.map(sectorLabel), textposition: "middle left",
+        marker: { size: nSectors.map((s) => 10 + Math.sqrt(total((j) => j.sector === s, d.jobs)) * 4), color: nSectors.map(colorOf) }, hoverinfo: "text", showlegend: false },
+      { type: "scatter", mode: "markers+text", x: nCities.map(() => 1), y: nCities.map((c, i) => ys(nCities.length, i)), text: nCities, textposition: "middle right",
+        marker: { size: nCities.map((c) => 10 + Math.sqrt(total((j) => j.city === c, d.jobs)) * 4), color: th.text }, hoverinfo: "text", showlegend: false },
+    ], { xaxis: { visible: false, range: [-0.9, 1.9] }, yaxis: { visible: false, range: [-0.1, 1.1] }, margin: { l: 10, r: 10, t: 10, b: 10 } });
+  } else insEmpty("chNet", "ins.noData");
+
+  // 12. 3D scatter: rating × reviews × distance to the city centre
+  const pts3d = rated.filter((c) => c.lat && c.lng);
+  if (pts3d.length) insPlot("ch3d", [true, false].map((acc) => {
+    const pts = pts3d.filter((c) => c.accepts === acc);
+    return { type: "scatter3d", mode: "markers", name: t(acc ? "ins.acceptsApps" : "ins.noEmail"), x: pts.map((c) => c.rating), y: pts.map((c) => Math.log10(c.reviews + 1)),
+      z: pts.map((c) => insKm(c.lat, c.lng)), text: pts.map((c) => c.name), marker: { size: 3.5, color: acc ? INS_PAL[0] : INS_PAL[1], opacity: 0.8 },
+      hovertemplate: `<b>%{text}</b><br>%{x} ★ · %{z:.1f} km<extra></extra>` };
+  }), { margin: { l: 0, r: 0, t: 30, b: 0 }, scene: { bgcolor: "rgba(0,0,0,0)", aspectmode: "cube", camera: { eye: { x: 1.6, y: 1.6, z: 0.9 } },
+    xaxis: { title: { text: t("ins.rating") }, gridcolor: th.border, color: th.muted }, yaxis: { title: { text: t("ins.reviews3d") }, gridcolor: th.border, color: th.muted },
+    zaxis: { title: { text: t("ins.distance") }, gridcolor: th.border, color: th.muted } } });
+  else insEmpty("ch3d", "ins.noData");
+}
+
 // ---------------------------------------------------------------- Users
 const ROLE_BADGE = { student: "badge-green", company: "badge-blue", admin: "badge-gold" };
 
@@ -303,5 +497,7 @@ if (me) {
   $("#dirQ").addEventListener("input", debounce(() => { dirPage = 1; loadDirectoryAdmin(); }));
   $("#dirShow").addEventListener("change", () => { dirPage = 1; loadDirectoryAdmin(); });
   $("#jobQ").addEventListener("input", debounce(loadJobs));
-  panelRouter("analytics", { analytics: loadStats, users: loadUsers, companies: loadCompanies, jobs: loadJobs, reviews: loadReviews });
+  $("#insSector").addEventListener("change", drawInsights);
+  $("#insCity").addEventListener("change", drawInsights);
+  panelRouter("analytics", { analytics: loadStats, insights: loadInsights, users: loadUsers, companies: loadCompanies, jobs: loadJobs, reviews: loadReviews });
 }

@@ -34,7 +34,7 @@ from sqlalchemy.orm import Session, selectinload
 from . import ai
 from .database import (CONTACT_EMAIL, FRONTEND_DIR, GOOGLE_CLIENT_ID, JOOBLE_API_KEY, OFFER_MAX_DAYS, SITE_URL, Application, Base, Company, DirectoryCompany, EmailCode,
                        CompanyContact, Job, Message, Notification, Review, SessionLocal, Setting, SpontaneousApplication, StudentCV,
-                       SavedJob, SavedSearch, StudentProfile, User, engine, get_db, utcnow)
+                       SavedJob, SavedSearch, StudentProfile, User, engine, get_db, iso, utcnow)
 from .helpers import (check_signature, current_user, guess_sector, hash_password, login_response, mail_enabled, make_token,
                       match_job, notify, optional_user, read_token, require_role, send_email, send_mail, sign, verify_password)
 from .seed import refresh_due, refresh_offers, seed
@@ -1391,6 +1391,20 @@ def admin_stats(days: int = 30, _: User = Depends(admin_only), db: Session = Dep
         "recent_users": [u.public() for u in db.scalars(select(User).order_by(User.created_at.desc()).limit(6))],
         "offers_refresh": {"enabled": bool(JOOBLE_API_KEY), "last": (db.get(Setting, "offers_refreshed_at") or Setting(value="")).value},
         "ai_enabled": ai.ai_available(),
+    }
+
+
+@app.get("/api/admin/insights")
+def admin_insights(_: User = Depends(admin_only), db: Session = Depends(get_db)):
+    """Raw rows for the "Data analysis" tab: the charts (histogram, heatmap, map...) are computed in the browser."""
+    contacts = dict(db.execute(select(CompanyContact.directory_id, CompanyContact.opted_out)).all())
+    return {
+        "directory": [{"name": c.name, "sector": c.sector, "rating": c.rating, "reviews": c.reviews, "lat": c.latitude, "lng": c.longitude,
+                       "accepts": c.id in contacts and not contacts[c.id]} for c in db.scalars(select(DirectoryCompany))],
+        "jobs": [{"type": j.type, "city": j.city, "sector": j.sector or "services", "status": j.status, "created_at": iso(j.created_at)}
+                 for j in db.scalars(select(Job))],
+        "applications": [{"created_at": iso(a.created_at), "status": a.status, "match": a.match_score} for a in db.scalars(select(Application))],
+        "users": [{"created_at": iso(u.created_at), "role": u.role} for u in db.scalars(select(User))],
     }
 
 

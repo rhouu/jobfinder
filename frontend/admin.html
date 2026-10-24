@@ -15,6 +15,7 @@
     <aside class="sidebar">
       <div class="s-label" data-i18n="adm.platform"></div>
       <button class="side-link" data-panel="analytics"><i data-icon="chart"></i> <span data-i18n="adm.analytics"></span></button>
+      <button class="side-link" data-panel="insights"><i data-icon="target"></i> <span data-i18n="ins.nav"></span></button>
       <button class="side-link" data-panel="users"><i data-icon="users"></i> <span data-i18n="adm.users"></span></button>
       <button class="side-link" data-panel="companies"><i data-icon="building"></i> <span data-i18n="nav.companies"></span> <span class="count" id="pendingCount">0</span></button>
       <button class="side-link" data-panel="jobs"><i data-icon="briefcase"></i> <span data-i18n="adm.offers"></span></button>
@@ -50,6 +51,42 @@
         <div class="grid-2">
           <div class="card"><h3 style="margin-bottom:16px" data-i18n="adm.byCity"></h3><div class="bar-chart" id="cityChart"></div></div>
           <div class="card"><div class="card-title"><h3 data-i18n="adm.recentUsers"></h3><a href="#users" class="small" data-i18n="adm.seeAll"></a></div><div id="recentUsers" class="recent-users"></div></div>
+        </div>
+      </section>
+
+      <!-- Data analysis: the chart types of the M202 course (slides 53-90) on the platform's data, drawn with Plotly -->
+      <section class="panel" id="panel-insights">
+        <div class="dash-head"><div><p class="muted" data-i18n="adm.administration"></p><h1 data-i18n="ins.title"></h1><p class="muted" id="insSummary"></p></div>
+          <div class="row ins-filters">
+            <label class="small muted" for="insSector" data-i18n="ins.filter"></label>
+            <select class="select" id="insSector" style="width:auto"></select>
+            <select class="select" id="insCity" style="width:auto"></select>
+          </div></div>
+        <div class="ins-grid" id="insGrid">
+          <div class="card ins-card"><div class="card-title"><h3 data-i18n="ins.hist"></h3><span class="badge" data-i18n="ins.histKind"></span></div>
+            <p class="muted small" data-i18n="ins.histSub"></p><div class="ins-chart" id="chHist"></div></div>
+          <div class="card ins-card"><div class="card-title"><h3 data-i18n="ins.bars"></h3><span class="badge" data-i18n="ins.barsKind"></span></div>
+            <p class="muted small" data-i18n="ins.barsSub"></p><div class="ins-chart" id="chBars"></div></div>
+          <div class="card ins-card"><div class="card-title"><h3 data-i18n="ins.pie"></h3><span class="badge" data-i18n="ins.pieKind"></span></div>
+            <p class="muted small" data-i18n="ins.pieSub"></p><div class="ins-chart" id="chPie"></div></div>
+          <div class="card ins-card"><div class="card-title"><h3 data-i18n="ins.line"></h3><span class="badge" data-i18n="ins.lineKind"></span></div>
+            <p class="muted small" data-i18n="ins.lineSub"></p><div class="ins-chart" id="chLine"></div></div>
+          <div class="card ins-card"><div class="card-title"><h3 data-i18n="ins.scatter"></h3><span class="badge" data-i18n="ins.scatterKind"></span></div>
+            <p class="muted small" data-i18n="ins.scatterSub"></p><div class="ins-chart" id="chScatter"></div></div>
+          <div class="card ins-card"><div class="card-title"><h3 data-i18n="ins.heat"></h3><span class="badge" data-i18n="ins.heatKind"></span></div>
+            <p class="muted small" data-i18n="ins.heatSub"></p><div class="ins-chart" id="chHeat"></div></div>
+          <div class="card ins-card"><div class="card-title"><h3 data-i18n="ins.box"></h3><span class="badge" data-i18n="ins.boxKind"></span></div>
+            <p class="muted small" data-i18n="ins.boxSub"></p><div class="ins-chart" id="chBox"></div></div>
+          <div class="card ins-card"><div class="card-title"><h3 data-i18n="ins.radar"></h3><span class="badge" data-i18n="ins.radarKind"></span></div>
+            <p class="muted small" data-i18n="ins.radarSub"></p><div class="ins-chart" id="chRadar"></div></div>
+          <div class="card ins-card"><div class="card-title"><h3 data-i18n="ins.combo"></h3><span class="badge" data-i18n="ins.comboKind"></span></div>
+            <p class="muted small" data-i18n="ins.comboSub"></p><div class="ins-chart" id="chCombo"></div></div>
+          <div class="card ins-card"><div class="card-title"><h3 data-i18n="ins.net"></h3><span class="badge" data-i18n="ins.netKind"></span></div>
+            <p class="muted small" data-i18n="ins.netSub"></p><div class="ins-chart" id="chNet"></div></div>
+          <div class="card ins-card wide"><div class="card-title"><h3 data-i18n="ins.map"></h3><span class="badge" data-i18n="ins.mapKind"></span></div>
+            <p class="muted small" data-i18n="ins.mapSub"></p><div class="ins-chart tall" id="chMap"></div></div>
+          <div class="card ins-card wide"><div class="card-title"><h3 data-i18n="ins.3d"></h3><span class="badge" data-i18n="ins.3dKind"></span></div>
+            <p class="muted small" data-i18n="ins.3dSub"></p><div class="ins-chart tall" id="ch3d"></div></div>
         </div>
       </section>
 
@@ -101,6 +138,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/ScrollTrigger.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/SplitText.min.js"></script>
+  <!-- Plotly: interactive charts for the Data analysis tab -->
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/admin.js"></script>
 </body>

@@ -678,3 +678,12 @@ a.todo-item:hover { background: var(--primary-soft); }
 .consent { text-align: center; }
 .consent a { color: var(--primary); font-weight: 600; }
 @media (max-width: 600px) { .legal-page .card { padding: 24px 20px; } }
+
+/* Admin: Data analysis tab (Plotly charts) */
+.ins-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.ins-card.wide { grid-column: 1 / -1; }
+.ins-card .card-title { margin-bottom: 4px; }
+.ins-chart { height: 320px; margin-top: 10px; }
+.ins-chart.tall { height: 440px; }
+.ins-filters { gap: 8px; }
+@media (max-width: 1000px) { .ins-grid { grid-template-columns: 1fr; } }
