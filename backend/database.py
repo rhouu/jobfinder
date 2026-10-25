@@ -43,6 +43,8 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 SMTP = {k: os.getenv(f"SMTP_{k.upper()}", "") for k in ("host", "port", "user", "password", "sender")}
+# Brevo's email API (HTTPS). Use it on hosts that block SMTP ports, like Render's free plan. The sender is SMTP_SENDER.
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@jobfinder.ma")
 CONTACT_EMAIL = os.getenv("CONTACT_EMAIL", "") or ADMIN_EMAIL  # shown on the privacy and terms pages
 # Fresh offers from Jooble's official API (free key: https://jooble.org/api/about). Empty key = no automatic refresh.

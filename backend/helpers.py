@@ -23,10 +23,11 @@ from html import escape
 from html.parser import HTMLParser
 
 import jwt
+import requests
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from .database import SECRET_KEY, SITE_URL, SMTP, Job, Notification, StudentProfile, User, get_db
+from .database import BREVO_API_KEY, SECRET_KEY, SITE_URL, SMTP, Job, Notification, StudentProfile, User, get_db
 
 log = logging.getLogger("jobfinder")
 
@@ -232,8 +233,9 @@ EMAILS = {  # kind -> language -> (subject, body). {placeholders} come from `dat
 }
 
 
-def send_email(user: User, kind: str, data: dict) -> None:
-    """Sends in a background thread. Without SMTP settings the email is printed in the server console."""
+def send_email(user: User, kind: str, data: dict, wait: bool = False) -> bool:
+    """Sends in a background thread (wait=True: now, and returns whether it worked).
+    Without email settings the email is printed in the server console."""
     lang = user.language if user.language in ("en", "fr", "ar") else "en"
     values = {"name": user.name.split()[0], **data}
     if "status" in values:
@@ -243,17 +245,42 @@ def send_email(user: User, kind: str, data: dict) -> None:
     subject, body = (part.format(**values) for part in EMAILS[kind][lang])
 
     if not mail_enabled():
-        log.info("EMAIL (no SMTP configured) to %s\nSubject: %s\n%s", user.email, subject, body)
-        return
+        log.info("EMAIL (no email settings) to %s\nSubject: %s\n%s", user.email, subject, body)
+        return False
+    if wait:
+        return send_mail(user.email, subject, body)
     threading.Thread(target=send_mail, args=(user.email, subject, body), daemon=True).start()
+    return True
 
 
 def mail_enabled() -> bool:
-    return bool(SMTP["host"])
+    return bool(BREVO_API_KEY or SMTP["host"])
+
+
+def _send_brevo(to: str, subject: str, body: str, reply_to: str, attachment: tuple[str, bytes] | None) -> bool:
+    """Brevo's transactional email API: https://developers.brevo.com/reference/sendtransacemail"""
+    payload = {"sender": {"name": "JobFinder.ma", "email": SMTP["sender"] or SMTP["user"]}, "to": [{"email": to}],
+               "subject": subject, "textContent": body}
+    if reply_to:
+        payload["replyTo"] = {"email": reply_to}
+    if attachment:
+        payload["attachment"] = [{"name": attachment[0], "content": base64.b64encode(attachment[1]).decode()}]
+    try:
+        r = requests.post("https://api.brevo.com/v3/smtp/email", json=payload, timeout=20,
+                          headers={"api-key": BREVO_API_KEY, "accept": "application/json"})
+        if r.status_code < 300:
+            return True
+        log.warning("Brevo refused the email to %s: %s %s", to, r.status_code, r.text[:300])
+    except requests.RequestException as exc:
+        log.warning("Could not reach Brevo for %s: %s", to, exc)
+    return False
 
 
 def send_mail(to: str, subject: str, body: str, reply_to: str = "", attachment: tuple[str, bytes] | None = None) -> bool:
-    """Sends one email now. reply_to: where answers go. attachment: (file name, PDF bytes). Returns False on failure."""
+    """Sends one email now. reply_to: where answers go. attachment: (file name, PDF bytes). Returns False on failure.
+    Uses Brevo's API when BREVO_API_KEY is set, otherwise SMTP."""
+    if BREVO_API_KEY:
+        return _send_brevo(to, subject, body, reply_to, attachment)
     msg = EmailMessage()
     msg["From"], msg["To"], msg["Subject"] = SMTP["sender"] or SMTP["user"], to, subject
     if reply_to:

@@ -40,6 +40,8 @@ Copy `.env.example` to `.env`, then:
 | Production | `SECRET_KEY`, `ADMIN_PASSWORD`, `SITE_URL` |
 
 Without SMTP, emails (verification and reset links included) are printed in the server console, so you can click the link from there.
+**On Render's free plan, SMTP is blocked** (ports 25/465/587): set `BREVO_API_KEY` (free Brevo account, 300 emails/day) and `SMTP_SENDER` to an address verified in Brevo; emails then go through Brevo's HTTPS API. If a confirmation code can't be sent, the person is signed in without it instead of being stuck.
+
 Spontaneous applications are the exception: they need real SMTP. With Gmail: turn on 2-step verification, create an
 **app password** (Google account > Security > App passwords), then set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`,
 `SMTP_USER` / `SMTP_SENDER` = the Gmail address, `SMTP_PASSWORD` = the app password. Gmail sends up to ~500 emails a day.

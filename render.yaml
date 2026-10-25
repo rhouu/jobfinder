@@ -31,6 +31,8 @@ services:
         sync: false
       - key: CONTACT_EMAIL         # optional: shown on the privacy and terms pages (default: ADMIN_EMAIL)
         sync: false
+      - key: BREVO_API_KEY         # emails on the free plan (Render blocks SMTP); sender = SMTP_SENDER
+        sync: false
       - key: SMTP_HOST             # optional, for real emails
         sync: false
       - key: SMTP_PORT

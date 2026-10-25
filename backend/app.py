@@ -160,22 +160,32 @@ def _needs_code(user: User) -> bool:
     return not user.email_verified and mail_enabled()
 
 
-def _send_code(user: User, db: Session) -> None:
+def _send_code(user: User, db: Session) -> bool:
+    """Emails a new code. Returns False if the email could not be sent."""
     row, now = user.email_code, utcnow()
     if row and (now - row.sent_at).total_seconds() < 60:
-        return  # at most one email per minute
+        return True  # at most one email per minute (the last one was sent)
     code = f"{secrets.randbelow(10 ** 6):06d}"
     if not row:
         row = user.email_code = EmailCode(user_id=user.id)
     row.code_hash, row.attempts = sign(f"code:{user.id}:{code}"), 0
     row.sent_at, row.expires_at = now, now + timedelta(minutes=CODE_MINUTES)
     db.commit()
-    send_email(user, "code", {"code": code, "minutes": CODE_MINUTES})
+    sent = send_email(user, "code", {"code": code, "minutes": CODE_MINUTES}, wait=True)
+    if not sent:
+        db.delete(row)  # so the next try sends a new code at once
+        db.commit()
+    return sent
 
 
 def _code_step(user: User, db: Session) -> dict:
-    _send_code(user, db)
-    return {"needs_code": True, "email": user.email}
+    if _send_code(user, db):
+        return {"needs_code": True, "email": user.email}
+    # The email service is down or misconfigured: don't lock the person out, sign them in (email not confirmed)
+    log.warning("Confirmation code for %s could not be emailed; signing in without it", user.email)
+    user.last_login = utcnow()
+    db.commit()
+    return login_response(user)
 
 
 @app.post("/api/auth/register")
