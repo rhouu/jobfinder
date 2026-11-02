@@ -233,6 +233,50 @@ EMAILS = {  # kind -> language -> (subject, body). {placeholders} come from `dat
 }
 
 
+CODE_HTML_TEXT = {  # The designed version of the "code" email. Tables and inline styles: email apps ignore most CSS.
+    "en": {"dir": "ltr", "title": "Confirm your email", "hello": "Hello {name},",
+           "lead": "Enter this code on JobFinder.ma to confirm your email address.", "expires": "Expires in {minutes} minutes",
+           "safe": "Never share this code with anyone. JobFinder.ma will never ask you for it.",
+           "ignore": "If you didn't create an account, you can ignore this email.", "tagline": "Jobs and internships in Morocco"},
+    "fr": {"dir": "ltr", "title": "Confirmez votre e-mail", "hello": "Bonjour {name},",
+           "lead": "Saisissez ce code sur JobFinder.ma pour confirmer votre adresse e-mail.", "expires": "Expire dans {minutes} minutes",
+           "safe": "Ne partagez jamais ce code. JobFinder.ma ne vous le demandera jamais.",
+           "ignore": "Si vous n'avez pas créé de compte, ignorez cet e-mail.", "tagline": "Emplois et stages au Maroc"},
+    "ar": {"dir": "rtl", "title": "أكّد بريدك الإلكتروني", "hello": "مرحبًا {name}،",
+           "lead": "أدخل هذا الرمز في JobFinder.ma لتأكيد بريدك الإلكتروني.", "expires": "تنتهي صلاحيته خلال {minutes} دقيقة",
+           "safe": "لا تشارك هذا الرمز مع أي شخص. لن يطلبه منك JobFinder.ma أبدًا.",
+           "ignore": "إذا لم تنشئ حسابًا، تجاهل هذه الرسالة.", "tagline": "وظائف وتداريب في المغرب"},
+}
+
+
+def code_email_html(lang: str, name: str, code: str, minutes: int) -> str:
+    text = CODE_HTML_TEXT[lang]
+    align = "right" if text["dir"] == "rtl" else "left"
+    font = "font-family:Arial,Helvetica,sans-serif;"
+    return f"""<!doctype html>
+<html lang="{lang}" dir="{text['dir']}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f6f1e9;">
+<div style="display:none;max-height:0;overflow:hidden;">{code} - {escape(text['title'])}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f1e9;"><tr><td align="center" style="padding:32px 16px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #ebe3d6;">
+    <tr><td style="background:#23805d;padding:24px 32px;{font}font-size:21px;font-weight:bold;color:#ffffff;text-align:{align};" dir="ltr">JobFinder<span style="color:#f6c06f;">.ma</span></td></tr>
+    <tr><td dir="{text['dir']}" style="padding:32px 32px 8px;{font}text-align:{align};">
+      <h1 style="margin:0 0 16px;font-size:24px;line-height:1.3;color:#2c2a33;">{escape(text['title'])}</h1>
+      <p style="margin:0 0 6px;font-size:16px;line-height:1.5;color:#2c2a33;">{escape(text['hello'].format(name=name))}</p>
+      <p style="margin:0;font-size:16px;line-height:1.5;color:#6c6877;">{escape(text['lead'])}</p>
+    </td></tr>
+    <tr><td style="padding:20px 32px 8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" dir="ltr" style="background:#e8f5ee;border:1px solid #bfe3d2;border-radius:12px;padding:20px 8px;{font}font-size:36px;font-weight:bold;letter-spacing:8px;color:#23805d;">{code}</td></tr></table>
+    </td></tr>
+    <tr><td align="center" dir="{text['dir']}" style="padding:4px 32px 24px;{font}font-size:14px;font-weight:bold;color:#6c6877;">{escape(text['expires'].format(minutes=minutes))}</td></tr>
+    <tr><td style="padding:0 32px;"><div style="border-top:1px solid #ebe3d6;font-size:0;line-height:0;">&nbsp;</div></td></tr>
+    <tr><td dir="{text['dir']}" style="padding:20px 32px 28px;{font}font-size:13px;line-height:1.6;color:#6c6877;text-align:{align};">{escape(text['safe'])}<br>{escape(text['ignore'])}</td></tr>
+  </table>
+  <p dir="{text['dir']}" style="margin:16px 0 0;{font}font-size:12px;color:#6c6877;text-align:center;">JobFinder.ma · {escape(text['tagline'])}</p>
+</td></tr></table>
+</body></html>"""
+
+
 def send_email(user: User, kind: str, data: dict, wait: bool = False) -> bool:
     """Sends in a background thread (wait=True: now, and returns whether it worked).
     Without email settings the email is printed in the server console."""
@@ -243,13 +287,14 @@ def send_email(user: User, kind: str, data: dict, wait: bool = False) -> bool:
     if values.get("link", "").startswith("/"):
         values["link"] = SITE_URL + values["link"]
     subject, body = (part.format(**values) for part in EMAILS[kind][lang])
+    html = code_email_html(lang, values["name"], values["code"], values["minutes"]) if kind == "code" else ""
 
     if not mail_enabled():
         log.info("EMAIL (no email settings) to %s\nSubject: %s\n%s", user.email, subject, body)
         return False
     if wait:
-        return send_mail(user.email, subject, body)
-    threading.Thread(target=send_mail, args=(user.email, subject, body), daemon=True).start()
+        return send_mail(user.email, subject, body, html=html)
+    threading.Thread(target=send_mail, args=(user.email, subject, body), kwargs={"html": html}, daemon=True).start()
     return True
 
 
@@ -257,10 +302,12 @@ def mail_enabled() -> bool:
     return bool(BREVO_API_KEY or SMTP["host"])
 
 
-def _send_brevo(to: str, subject: str, body: str, reply_to: str, attachment: tuple[str, bytes] | None) -> bool:
+def _send_brevo(to: str, subject: str, body: str, reply_to: str, attachment: tuple[str, bytes] | None, html: str = "") -> bool:
     """Brevo's transactional email API: https://developers.brevo.com/reference/sendtransacemail"""
     payload = {"sender": {"name": "JobFinder.ma", "email": SMTP["sender"] or SMTP["user"]}, "to": [{"email": to}],
                "subject": subject, "textContent": body}
+    if html:
+        payload["htmlContent"] = html
     if reply_to:
         payload["replyTo"] = {"email": reply_to}
     if attachment:
@@ -276,16 +323,18 @@ def _send_brevo(to: str, subject: str, body: str, reply_to: str, attachment: tup
     return False
 
 
-def send_mail(to: str, subject: str, body: str, reply_to: str = "", attachment: tuple[str, bytes] | None = None) -> bool:
-    """Sends one email now. reply_to: where answers go. attachment: (file name, PDF bytes). Returns False on failure.
-    Uses Brevo's API when BREVO_API_KEY is set, otherwise SMTP."""
+def send_mail(to: str, subject: str, body: str, reply_to: str = "", attachment: tuple[str, bytes] | None = None, html: str = "") -> bool:
+    """Sends one email now. reply_to: where answers go. attachment: (file name, PDF bytes). html: designed version of body.
+    Returns False on failure. Uses Brevo's API when BREVO_API_KEY is set, otherwise SMTP."""
     if BREVO_API_KEY:
-        return _send_brevo(to, subject, body, reply_to, attachment)
+        return _send_brevo(to, subject, body, reply_to, attachment, html)
     msg = EmailMessage()
     msg["From"], msg["To"], msg["Subject"] = SMTP["sender"] or SMTP["user"], to, subject
     if reply_to:
         msg["Reply-To"] = reply_to
     msg.set_content(body)
+    if html:
+        msg.add_alternative(html, subtype="html")
     if attachment:
         msg.add_attachment(attachment[1], maintype="application", subtype="pdf", filename=attachment[0])
     try:

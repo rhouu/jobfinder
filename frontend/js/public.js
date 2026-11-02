@@ -701,14 +701,36 @@ function authPage() {
   });
 
   // Email accounts confirm their address with the 6-digit code we email them
-  let pending = null, timer = null;
+  let pending = null, timer = null, codeWave = null;
   function askCode(email) {
     pending = { email, password: $("#password").value };
-    $("#codeText").textContent = t("code.sent", { email });
-    $("#codeInput").value = "";
+    $("#codeText").textContent = t("code.sent");
+    $("#codeEmail").textContent = email;
+    setCode("");
     showCard("codeCard");
     $("#codeInput").focus();
     countdown();
+  }
+  function setCode(value) {
+    const input = $("#codeInput");
+    input.value = value;
+    $$(".code-slots span").forEach((box, i) => {
+      box.textContent = value[i] || "";
+      box.classList.toggle("filled", i < value.length);
+      box.classList.toggle("active", i === Math.min(value.length, 5));
+    });
+    $("#codeField").classList.remove("wrong", "right");
+    $("#codeField").classList.toggle("complete", value.length === 6);
+    $("#codeError").textContent = "";
+    $("#codeSubmit").disabled = value.length < 6;
+  }
+  function wrongCode(message) {
+    window.authCharsSad?.();
+    setCode("");
+    $("#codeError").textContent = message;
+    void $("#codeField").offsetWidth; // restarts the shake
+    $("#codeField").classList.add("wrong");
+    $("#codeInput").focus();
   }
   function countdown(seconds = 60) {
     const btn = $("#resendCode");
@@ -722,20 +744,27 @@ function authPage() {
     timer = setInterval(tick, 1000);
   }
   $("#codeInput").addEventListener("input", (e) => {
-    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6);
-    if (e.target.value.length === 6) $("#codeCard").requestSubmit();
+    setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+    clearTimeout(codeWave);
+    if (e.target.value.length === 6) codeWave = setTimeout(() => $("#codeCard").requestSubmit(), 650); // lets the wave finish
   });
-  $("#codeCard").addEventListener("submit", (e) => {
+  $("#codeInput").addEventListener("focus", () => $("#codeField").classList.add("focused"));
+  $("#codeInput").addEventListener("blur", () => $("#codeField").classList.remove("focused"));
+  $("#codeCard").addEventListener("submit", async (e) => {
     e.preventDefault();
     const code = $("#codeInput").value;
-    if (!/^\d{6}$/.test(code)) return toast(t("code.invalid"), "error");
-    withLoading($("button[type=submit], button:not([type])", e.target), async () => {
-      try { done(await API.post("/api/auth/verify-code", { ...pending, code })); }
-      catch (err) { toast(err.message, "error"); $("#codeInput").select(); }
+    if (!/^\d{6}$/.test(code) || $("#codeSubmit").disabled) return;
+    const failed = await withLoading($("#codeSubmit"), async () => {
+      try {
+        const data = await API.post("/api/auth/verify-code", { ...pending, code });
+        $("#codeField").classList.add("right");
+        done(data);
+      } catch (err) { return err; }
     });
+    if (failed) wrongCode(failed.message);
   });
   $("#resendCode").addEventListener("click", async () => {
-    try { await API.post("/api/auth/resend-code", pending); toast(t("code.resent"), "success"); countdown(); }
+    try { await API.post("/api/auth/resend-code", pending); setCode(""); toast(t("code.resent"), "success"); countdown(); $("#codeInput").focus(); }
     catch (err) { toast(err.message, "error"); }
   });
 

@@ -53,15 +53,22 @@
       </div>
 
       <!-- 6-digit code sent by email to confirm the address -->
-      <form class="auth-card card hidden" id="codeCard" style="text-align:center" novalidate>
-        <div class="k-icon kpi-icon" style="margin:0 auto 16px;--kc:#2e9e74"><i data-icon="mail" data-size="24"></i></div>
-        <h2 style="margin-bottom:8px" data-i18n="code.title"></h2>
-        <p class="muted" id="codeText" style="margin-bottom:18px"></p>
-        <input class="input code-input" id="codeInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-label="Code">
-        <button class="btn btn-primary btn-block btn-lg" style="margin-top:16px" data-i18n="code.verify"></button>
-        <p class="muted small" style="margin-top:14px" data-i18n="code.spam"></p>
-        <button type="button" class="link-btn" id="resendCode" style="margin-top:6px"></button>
-        <button type="button" class="link-btn" style="margin-top:6px" data-back data-i18n="code.change"></button>
+      <form class="auth-card card hidden" id="codeCard" novalidate>
+        <div class="code-badge"><i data-icon="mail" data-size="26"></i></div>
+        <h2 data-i18n="code.title"></h2>
+        <p class="muted code-text"><span id="codeText"></span> <strong id="codeEmail" dir="ltr"></strong></p>
+        <!-- One real input (so paste and phone autofill work) laid over six boxes that show its digits -->
+        <div class="code-field" id="codeField" dir="ltr">
+          <div class="code-slots" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <input id="codeInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" data-i18n-aria="code.label" aria-describedby="codeError">
+        </div>
+        <p class="code-error" id="codeError" role="alert"></p>
+        <button class="btn btn-primary btn-block btn-lg" id="codeSubmit" data-i18n="code.verify"></button>
+        <p class="muted small code-help" data-i18n="code.spam"></p>
+        <div class="code-actions">
+          <button type="button" class="link-btn" id="resendCode"></button>
+          <button type="button" class="link-btn" data-back data-i18n="code.change"></button>
+        </div>
       </form>
 
       <!-- Forgot password -->
