@@ -64,6 +64,46 @@ async function loadOverview() {
   } catch (err) { toast(err.message, "error"); }
 }
 
+// ---------------------------------------------------------------- Offer stats
+async function openJobStats(id) {
+  let s;
+  try { s = await API.get(`/api/company/jobs/${id}/stats`); } catch (err) { return toast(err.message, "error"); }
+  const max = Math.max(1, ...s.per_day.map((d) => d.views));
+  const dayName = (d) => new Date(d + "T12:00:00Z").toLocaleDateString(LOCALE, { day: "numeric", month: "short" });
+  const tile = (label, value, suffix = "") => `<div class="stat-tile"><span class="muted small">${label}</span><strong>${fmt.format(value)}${suffix}</strong></div>`;
+  const recent = s.per_day.reduce((n, d) => n + d.views, 0);
+  modal({
+    title: t("st.title", { job: s.title }),
+    wide: true,
+    body: `
+      <div class="stat-tiles">
+        ${tile(t("st.views"), s.views)}${tile(t("st.apps"), s.applications)}${tile(t("st.conv"), s.conversion, "%")}${tile(t("st.saves"), s.saves)}
+      </div>
+      <h4 class="stat-h">${t("st.perDay", { n: s.per_day.length })}</h4>
+      <p class="muted small" id="dayReadout" aria-live="polite">${recent ? t("st.hover") : t("st.noViews")}</p>
+      <div class="day-chart" role="img" aria-label="${esc(t("st.perDay", { n: s.per_day.length }))}">
+        ${s.per_day.map((d) => `<div class="day-col" tabindex="0" data-label="${esc(t("st.dayViews", { day: dayName(d.day), n: d.views }))}">
+          <div class="day-bar ${d.views ? "" : "zero"}" style="--h:${(100 * d.views) / max}%"></div></div>`).join("")}
+      </div>
+      <div class="day-axis muted small"><span>${dayName(s.per_day[0].day)}</span><span>${dayName(s.per_day[s.per_day.length - 1].day)}</span></div>
+      <table class="sr-only"><tbody>${s.per_day.map((d) => `<tr><th>${d.day}</th><td>${d.views}</td></tr>`).join("")}</tbody></table>
+      <h4 class="stat-h">${t("st.pipeline")}</h4>
+      <div id="statFunnel"></div>
+      <p class="muted small" style="margin-top:14px">${s.applications ? t("st.avgMatch", { n: s.avg_match }) : t("st.noApps")}</p>`,
+    onOpen: (el) => {
+      barChart($("#statFunnel", el), Object.entries(s.by_status).map(([k, v]) => ({ label: t("status." + k), value: v, color: STATUS_COLORS[k] })));
+      const readout = $("#dayReadout", el), idle = readout.textContent;
+      $$(".day-col", el).forEach((c) => {
+        const show = () => { readout.textContent = c.dataset.label; };
+        c.addEventListener("mouseenter", show);
+        c.addEventListener("focus", show);
+        c.addEventListener("mouseleave", () => { readout.textContent = idle; });
+        c.addEventListener("blur", () => { readout.textContent = idle; });
+      });
+    },
+  });
+}
+
 // ---------------------------------------------------------------- Offers
 async function loadJobs() {
   try {
@@ -75,10 +115,12 @@ async function loadJobs() {
         <td><button class="btn btn-ghost btn-sm" data-applicants="${j.id}">${icon("users", 14)} ${j.applicants}</button></td>
         <td>${j.views}</td>
         <td><label class="row" style="cursor:pointer;flex-wrap:nowrap"><span class="switch"><input type="checkbox" data-toggle="${j.id}" ${j.status === "open" ? "checked" : ""}><span></span></span><span class="muted small">${t(j.status === "open" ? "co.open" : "co.closed")}</span></label></td>
-        <td><div class="actions"><a class="btn btn-ghost btn-sm" href="/job.html?id=${j.id}" target="_blank">${icon("eye", 14)}</a>
+        <td><div class="actions"><button class="btn btn-ghost btn-sm" data-stats="${j.id}" aria-label="${esc(t("st.open"))}" title="${esc(t("st.open"))}">${icon("chart", 14)}</button>
+          <a class="btn btn-ghost btn-sm" href="/job.html?id=${j.id}" target="_blank">${icon("eye", 14)}</a>
           <button class="btn btn-ghost btn-sm" data-edit="${j.id}">${icon("edit", 14)}</button><button class="btn btn-danger btn-sm" data-del="${j.id}">${icon("trash", 14)}</button></div></td>
       </tr>`).join("") : `<tr><td colspan="7"><div class="empty">${icon("briefcase", 36)}<h3>${t("co.noOffers")}</h3></div></td></tr>`;
     $$("[data-edit]").forEach((b) => b.addEventListener("click", () => openJobForm(jobs.find((j) => j.id === +b.dataset.edit))));
+    $$("[data-stats]").forEach((b) => b.addEventListener("click", () => openJobStats(+b.dataset.stats)));
     $$("[data-applicants]").forEach((b) => b.addEventListener("click", () => { $("#jobFilter").value = b.dataset.applicants; location.hash = "applicants"; }));
     $$("[data-del]").forEach((b) => b.addEventListener("click", async () => {
       if (!(await confirmDialog(t("co.deleteConfirm"), t("common.delete")))) return;

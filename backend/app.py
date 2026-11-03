@@ -33,8 +33,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from . import ai
 from .database import (CONTACT_EMAIL, FRONTEND_DIR, GOOGLE_CLIENT_ID, JOOBLE_API_KEY, OFFER_MAX_DAYS, SITE_URL, Application, Base, Company, DirectoryCompany, EmailCode,
-                       CompanyContact, Job, Message, Notification, Review, SessionLocal, Setting, SpontaneousApplication, StudentCV,
-                       SavedJob, SavedSearch, StudentProfile, User, engine, get_db, iso, utcnow)
+                       CompanyContact, DeadlineReminder, Job, JobViewDay, Message, Notification, Review, SessionLocal, Setting,
+                       SpontaneousApplication, StudentCV, SavedJob, SavedSearch, StudentProfile, User, engine, get_db, iso, utcnow)
 from .helpers import (check_signature, current_user, guess_sector, hash_password, login_response, mail_enabled, make_token,
                       match_job, notify, optional_user, read_token, require_role, send_email, send_mail, sign, verify_password)
 from .seed import refresh_due, refresh_offers, seed
@@ -64,15 +64,43 @@ def _refresh_and_alert(db: Session) -> dict:
     return {"added": len(result["added"]), "closed": result["closed"]}
 
 
+REMIND_DAYS = 3  # saved offers closing within this many days get a reminder
+
+
+def _deadline_reminders(db: Session) -> int:
+    """Tells students (bell + email, once per offer) that an offer they saved, and haven't applied to, closes soon."""
+    now = utcnow()
+    rows = db.scalars(select(SavedJob).join(Job).options(selectinload(SavedJob.job).selectinload(Job.company))
+                      .where(Job.status == "open", Job.deadline.is_not(None), Job.deadline > now,
+                             Job.deadline <= now + timedelta(days=REMIND_DAYS))).all()
+    done = set(db.execute(select(DeadlineReminder.user_id, DeadlineReminder.job_id)).tuples())
+    applied = set(db.execute(select(Application.student_id, Application.job_id)).tuples())
+    sent = 0
+    for s in rows:
+        if (s.user_id, s.job_id) in done or (s.user_id, s.job_id) in applied:
+            continue
+        user = db.get(User, s.user_id)
+        if not user or not user.is_active:
+            continue
+        days = max(1, -(-(s.job.deadline - now).total_seconds() // 86400))  # rounded up: "closes in 1 day" until it closes
+        db.add(DeadlineReminder(user_id=s.user_id, job_id=s.job_id))
+        notify(db, user, "deadline", {"job": s.job.title, "company": s.job.company.name, "days": int(days)},
+               f"/job.html?id={s.job_id}", email=True)
+        sent += 1
+    db.commit()
+    return sent
+
+
 def _daily_offers():
-    """Background loop: once a day, new offers from Jooble come in and old job-board offers close.
-    (On a free host that sleeps, this runs the next time the site wakes up.)"""
+    """Background loop, every hour: deadline reminders; once a day, new offers from Jooble come in and old
+    job-board offers close. (On a free host that sleeps, this runs the next time the site wakes up.)"""
     time.sleep(20)  # let the site finish starting
     while True:
         try:
             with SessionLocal() as db:
                 if refresh_due(db):
                     _refresh_and_alert(db)
+                _deadline_reminders(db)
         except Exception:  # never let the loop die
             log.exception("Daily offers refresh failed")
         time.sleep(3600)
@@ -429,8 +457,15 @@ def get_job(job_id: int, user: User | None = Depends(optional_user), db: Session
     owner = user and (user.role == "admin" or (user.company and user.company.id == job.company_id)) if job else False
     if not job or (job.status != "open" and not owner):
         raise HTTPException(404, "This offer no longer exists.")
-    job.views += 1
-    db.commit()
+    if not owner:  # the company checking its own offer doesn't count as a view
+        job.views += 1
+        day = utcnow().strftime("%Y-%m-%d")
+        row = db.scalar(select(JobViewDay).where(JobViewDay.job_id == job.id, JobViewDay.day == day))
+        if row:
+            row.views += 1
+        else:
+            db.add(JobViewDay(job_id=job.id, day=day, views=1))
+        db.commit()
     applied, saved = _student_marks(user, db)
     similar = db.scalars(select(Job).where(Job.status == "open", Job.id != job.id, or_(Job.type == job.type, Job.city == job.city))
                          .order_by(Job.created_at.desc()).limit(3))
@@ -1276,6 +1311,26 @@ def update_job(job_id: int, data: JobIn, user: User = Depends(company_only), db:
     return job.to_dict(with_company=False)
 
 
+@app.get("/api/company/jobs/{job_id}/stats")
+def job_stats(job_id: int, days: int = 14, user: User = Depends(company_only), db: Session = Depends(get_db)):
+    """One offer's numbers: views per day, how many viewers applied or saved it, and where its candidates are."""
+    job = _own_job(job_id, _company(user, db), db)
+    days = max(7, min(days, 60))
+    today = utcnow().date()
+    span = [(today - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
+    per_day = dict(db.execute(select(JobViewDay.day, JobViewDay.views).where(JobViewDay.job_id == job.id,
+                                                                            JobViewDay.day >= span[0])).tuples().all())
+    apps = job.applications
+    by_status = Counter(a.status for a in apps)
+    return {"title": job.title, "views": job.views, "applications": len(apps),
+            "saves": db.scalar(select(func.count(SavedJob.id)).where(SavedJob.job_id == job.id)),
+            "conversion": round(100 * len(apps) / job.views, 1) if job.views else 0,
+            "avg_match": round(sum(a.match_score for a in apps) / len(apps)) if apps else 0,
+            "by_status": {s: by_status.get(s, 0) for s in STATUSES},
+            "per_day": [{"day": d, "views": per_day.get(d, 0)} for d in span],
+            "since": iso(job.created_at)}
+
+
 @app.delete("/api/company/jobs/{job_id}")
 def delete_job(job_id: int, user: User = Depends(company_only), db: Session = Depends(get_db)):
     db.delete(_own_job(job_id, _company(user, db), db))
@@ -1427,7 +1482,8 @@ def admin_refresh_offers(_: User = Depends(admin_only), db: Session = Depends(ge
 
 # Backup: every table as JSON (passwords stay hashed, files as base64). Keep the file somewhere safe.
 BACKUP_TABLES = ["users", "student_profiles", "companies", "jobs", "applications", "saved_jobs", "messages", "reviews",
-                 "saved_searches", "notifications", "spontaneous_applications", "student_cvs", "company_contacts", "settings"]
+                 "saved_searches", "notifications", "spontaneous_applications", "student_cvs", "company_contacts", "settings",
+                 "job_view_days", "deadline_reminders"]
 
 
 @app.get("/api/admin/backup")

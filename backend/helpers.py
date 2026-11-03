@@ -225,6 +225,11 @@ EMAILS = {  # kind -> language -> (subject, body). {placeholders} come from `dat
         "fr": ("Nouveau message de {sender}", "Bonjour {name},\n\nVous avez un nouveau message de {sender} concernant « {job} ».\n\nLisez-le ici : {link}"),
         "ar": ("رسالة جديدة من {sender}", "مرحبًا {name}،\n\nلديك رسالة جديدة من {sender} بخصوص \"{job}\".\n\nاقرأها من هنا: {link}"),
     },
+    "deadline": {
+        "en": ("Closes soon: {job}", "Hello {name},\n\nThe offer you saved, \"{job}\" at {company}, closes in {days} day(s) and you haven't applied yet.\n\nApply here: {link}"),
+        "fr": ("Bientôt fermée : {job}", "Bonjour {name},\n\nL'offre que vous avez enregistrée, « {job} » chez {company}, ferme dans {days} jour(s) et vous n'avez pas encore postulé.\n\nPostulez ici : {link}"),
+        "ar": ("يُغلق قريبًا: {job}", "مرحبًا {name}،\n\nالعرض الذي حفظته، \"{job}\" لدى {company}، يُغلق خلال {days} يوم ولم تتقدّم له بعد.\n\nتقدّم من هنا: {link}"),
+    },
     "search_alert": {
         "en": ("New offer for your alert \"{search}\"", "Hello {name},\n\nA new offer matches your alert \"{search}\":\n{job} at {company} ({city})\n\nSee it here: {link}\n\nYou can turn off these emails in your dashboard."),
         "fr": ("Nouvelle offre pour votre alerte « {search} »", "Bonjour {name},\n\nUne nouvelle offre correspond à votre alerte « {search} » :\n{job} chez {company} ({city})\n\nVoir l'offre : {link}\n\nVous pouvez désactiver ces e-mails depuis votre tableau de bord."),

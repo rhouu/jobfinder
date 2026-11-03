@@ -73,10 +73,21 @@ Free Render services sleep after 15 minutes without visitors (the first visit th
 ### Moving the database to Neon (free, doesn't expire)
 
 Render's free PostgreSQL is deleted 30 days after creation. To move to Neon:
-1. Create a free project on neon.tech and copy its connection string.
-2. In Neon, use **Import data** with your Render database's *External Database URL* (Render > jobfinder-db > Connect).
-3. In Render > jobfinder > Environment, set `DATABASE_URL` to the Neon connection string and redeploy.
-4. Check the site, then delete `jobfinder-db` in Render.
+1. Admin dashboard > **Download backup** first, just in case.
+2. Create a free project on neon.tech (region: Europe, close to Morocco) and copy its connection string.
+3. Copy Render's *External Database URL* (Render > jobfinder-db > Connect).
+4. On your computer, in this folder, copy everything across (the addresses stay on your computer):
+   ```powershell
+   $env:OLD_DATABASE_URL="<Render external URL>"; $env:NEW_DATABASE_URL="<Neon connection string>"
+   python -m backend.copy_database
+   ```
+   It prints each table and how many rows it copied, and refuses to touch a database that already has accounts.
+5. In Render > jobfinder > Environment, set `DATABASE_URL` to the Neon connection string (this replaces the link to
+   `jobfinder-db`), then **Save, rebuild, and deploy**.
+6. Sign in on the live site and check your data is there. Only then delete `jobfinder-db` in Render.
+
+If Render's database is already gone, create the Neon project, set `DATABASE_URL` on Render, and the site starts fresh
+(it reloads the offers and companies from `data/` by itself; accounts would need restoring from a backup).
 
 ## Features
 

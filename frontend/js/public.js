@@ -444,7 +444,12 @@ function jobPage() {
       </div>
 
       <aside class="sticky-side">
-        <div class="card fade-up" style="--d:.1s">${applyBox()}</div>
+        <div class="card fade-up" style="--d:.1s">${applyBox()}
+          <div class="share-row">
+            <a class="btn btn-whatsapp btn-sm" id="shareWa" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(`${t("job.shareText", { job: job.title, company: c.name, city: job.city }, true)}\n${location.origin}/job.html?id=${job.id}`)}">${icon("whatsapp", 15)} ${t("job.shareWhatsapp")}</a>
+            <button class="btn btn-ghost btn-sm" id="copyLink">${icon("link", 15)} ${t("job.copyLink")}</button>
+          </div>
+        </div>
         ${m ? `
         <div class="card fade-up" style="--d:.2s;text-align:center">
           <h3 style="margin-bottom:16px">${t("job.matchTitle")}</h3>
@@ -461,6 +466,10 @@ function jobPage() {
     animateRings();
     bindJobCards($("#jobRoot"));
     $("#applyBtn")?.addEventListener("click", openApply);
+    $("#copyLink").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(`${location.origin}/job.html?id=${job.id}`); toast(t("job.linkCopied"), "success"); }
+      catch (_) { prompt(t("job.copyLink"), `${location.origin}/job.html?id=${job.id}`); }
+    });
     $("#saveBtn")?.addEventListener("click", async (e) => {
       try {
         await (job.saved ? API.del(`/api/student/saved/${job.id}`) : API.post(`/api/student/saved/${job.id}`));

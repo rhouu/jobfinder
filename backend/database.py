@@ -18,6 +18,8 @@ Tables
   student_cvs      the PDF CV a student saved, reused for spontaneous applications
   settings         small values the site remembers (e.g. when offers were last refreshed)
   spontaneous_applications  a student's CV emailed to a directory company
+  job_view_days    how many times an offer was opened each day (the company's offer stats)
+  deadline_reminders  a student was reminded that a saved offer closes soon (so it happens once)
 """
 import os
 from datetime import datetime, timezone
@@ -458,3 +460,23 @@ class SpontaneousApplication(Base):
     def to_dict(self) -> dict:
         return {"id": self.id, "directory_id": self.directory_id, "company": self.company.name, "sector": self.company.sector,
                 "city": self.company.city, "message": self.message, "created_at": iso(self.created_at)}
+
+
+class JobViewDay(Base):
+    """Views of an offer on one day (UTC), for the views-per-day chart in the company's offer stats."""
+    __tablename__ = "job_view_days"
+    __table_args__ = (UniqueConstraint("job_id", "day"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    day: Mapped[str] = mapped_column(String(10))  # YYYY-MM-DD
+    views: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class DeadlineReminder(Base):
+    """Remembers that a student was told a saved offer closes soon, so the reminder is sent only once."""
+    __tablename__ = "deadline_reminders"
+    __table_args__ = (UniqueConstraint("user_id", "job_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

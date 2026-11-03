@@ -688,6 +688,27 @@ a.todo-item:hover { background: var(--primary-soft); }
 @keyframes codeCaret { 50% { opacity: 0; } }
 @keyframes codeShake { 25% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
 @media (prefers-reduced-motion: reduce) { .code-field.wrong, .code-field.focused .code-slots span.active:empty::after { animation: none; } }
+/* Company: one offer's stats (window opened from the offers table) */
+.stat-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.stat-tile { display: grid; gap: 4px; padding: 14px; border-radius: 12px; background: var(--surface-2); }
+.stat-tile strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.stat-h { margin: 24px 0 2px; }
+.day-chart { display: flex; align-items: flex-end; gap: 2px; height: 140px; margin-top: 10px; border-bottom: 1px solid var(--border); }
+.day-col { flex: 1; height: 100%; display: flex; align-items: flex-end; cursor: default; outline: 0; }
+.day-bar { width: 100%; height: var(--h); min-height: 2px; border-radius: 4px 4px 0 0; background: var(--series-1); transition: height 0.5s ease, opacity 0.15s; }
+.day-bar.zero { background: var(--border); }
+.day-chart:hover .day-bar, .day-chart:focus-within .day-bar { opacity: 0.45; }
+.day-col:hover .day-bar, .day-col:focus .day-bar { opacity: 1; }
+.day-axis { display: flex; justify-content: space-between; margin-top: 6px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (max-width: 560px) { .stat-tiles { grid-template-columns: repeat(2, 1fr); } }
+/* Offer page: share buttons */
+.share-row { display: flex; gap: 8px; margin-top: 12px; }
+.share-row .btn { flex: 1; }
+.btn-whatsapp { background: #1f8f55; color: #fff; border-color: #1f8f55; }
+.btn-whatsapp:hover { background: #18774a; color: #fff; }
+/* "Install the app" button in the menu, shown only when the browser offers it */
+.install-btn { display: inline-flex; align-items: center; gap: 6px; }
 /* Google button: its frame must not inherit the dark colour scheme (that draws a white box around it) */
 .google-btn { display: flex; justify-content: center; min-height: 44px; color-scheme: normal; }
 .google-btn iframe { color-scheme: normal; }

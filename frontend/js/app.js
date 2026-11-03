@@ -136,6 +136,8 @@ const ICON_PATHS = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5zM3 13l9 5 9-5"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  whatsapp: '<path d="M3 21l1.65-4.7A8.5 8.5 0 1 1 8 19.6z"/><path d="M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.6-2-1-1 .9a5 5 0 0 1-2.8-2.8l.9-1-1-2z"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   verified: '<path d="M12 2l2.4 2.1 3.2-.3.9 3.1 2.8 1.6-1 3 1 3-2.8 1.6-.9 3.1-3.2-.3L12 22l-2.4-2.1-3.2.3-.9-3.1L2.7 15.5l1-3-1-3 2.8-1.6.9-3.1 3.2.3z" fill="currentColor" stroke="none"/><path d="m8.5 12 2.3 2.3 4.7-4.6" stroke="#fff"/>',
 };
@@ -512,6 +514,7 @@ function renderNav(active = "") {
     paintTheme();
   });
   $("#menuBtn").addEventListener("click", () => $("#navLinks").classList.toggle("open"));
+  if (installPrompt) showInstallButton();
   $("#logoutBtn")?.addEventListener("click", Auth.logout);
   if (u) {
     $("#readAll").addEventListener("click", async () => { await API.post("/api/notifications/read", { ids: [] }).catch(() => {}); loadNotifications(); });
@@ -535,7 +538,7 @@ async function loadNotifications() {
   if (!data) return;
   $("#notifList").innerHTML = data.items.length ? data.items.map((n) => `
     <a class="notif-item ${n.is_read ? "" : "unread"}" href="${esc(n.link || "#")}" data-id="${n.id}">
-      <span class="notif-icon">${icon({ status: "briefcase", new_application: "users", new_job_match: "target", search_alert: "search", message: "chat", interview: "calendar", verification: "shield" }[n.kind] || "bell", 16)}</span>
+      <span class="notif-icon">${icon({ status: "briefcase", new_application: "users", new_job_match: "target", search_alert: "search", deadline: "clock", message: "chat", interview: "calendar", verification: "shield" }[n.kind] || "bell", 16)}</span>
       <span class="grow"><span class="notif-text">${esc(notificationText(n))}</span><span class="muted small">${timeAgo(n.created_at)}</span></span>
     </a>`).join("") : `<div class="muted small pad">${t("notif.empty")}</div>`;
   $$(".notif-item", $("#notifList")).forEach((a) => a.addEventListener("click", () => {
@@ -580,6 +583,36 @@ function enablePageTransitions() {
     setTimeout(() => { location.href = url.href; }, 180);
   });
   addEventListener("pageshow", () => document.body.classList.remove("leaving")); // coming back with the Back button
+}
+
+/** Phone app: the service worker makes the site installable; the browser's install offer becomes a menu link. */
+let installPrompt = null;
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
+addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  if ($("#navLinks")) showInstallButton();
+});
+addEventListener("appinstalled", () => { installPrompt = null; $("#installBtn")?.remove(); });
+
+function showInstallButton() {
+  if ($("#installBtn")) return;
+  const btn = document.createElement("a");
+  btn.href = "#";
+  btn.id = "installBtn";
+  btn.className = "install-btn";
+  btn.innerHTML = `${icon("download", 16)} ${t("nav.install")}`;
+  btn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice.catch(() => {});
+    installPrompt = null;
+    btn.remove();
+  });
+  $("#navLinks").appendChild(btn);
 }
 
 /** Every page calls this first. */
