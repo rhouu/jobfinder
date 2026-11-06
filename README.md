@@ -63,6 +63,12 @@ Free Render services sleep after 15 minutes without visitors (the first visit th
   new offers in Morocco (search words in `JOOBLE_KEYWORDS`), adds the ones it doesn't have, sends job alerts for them, and
   closes job-board offers older than `OFFER_MAX_DAYS`. Admins can also click **Refresh offers**. On a free Render service
   that sleeps, the daily refresh runs the next time the site wakes up.
+- **Remote offers every day, no key needed.** The same daily refresh adds remote jobs open to candidates in Morocco
+  (worldwide, Africa, EMEA) from Remotive's public API, credited "via Remotive" with a link back, as its terms ask.
+- **Companies in other cities.** `python -m backend.fetch_osm_directory` downloads employers (offices, hotels,
+  factories, coworking spaces) in Casablanca, Rabat, Tanger, Fès, Agadir and Meknès from OpenStreetMap into
+  `data/companies_osm.csv`; the site adds the new ones to the directory on its next start. Run it again to refresh.
+  Data © OpenStreetMap contributors (ODbL), credited on the companies page.
 - **Google for Jobs.** Each offer page is sent with a schema.org `JobPosting` block, so Google can show it in its job
   search. `/sitemap.xml` lists every open offer and `/robots.txt` points to it. After going live, add the sitemap in
   Google Search Console.

@@ -83,7 +83,7 @@ async function loadStats() {
     $("#tDirectory").textContent = t("adm.inDirectory", { d: fmt.format(tot.directory), e: tot.external_companies });
     $("#pendingCount").textContent = tot.pending_verifications;
     const r = s.offers_refresh;
-    $("#refreshInfo").textContent = !r.enabled ? t("adm.refreshOff") : r.last ? t("adm.refreshLast", { when: timeAgo(r.last + "Z") }) : "";
+    $("#refreshInfo").textContent = [!r.jooble ? t("adm.refreshRemoteOnly") : "", r.last ? t("adm.refreshLast", { when: timeAgo(r.last + "Z") }) : ""].filter(Boolean).join(" · ");
     $("#aiBadge").className = `badge ${s.ai_enabled ? "badge-green" : "badge-gold"}`;
     $("#aiBadge").innerHTML = `${icon("spark", 14)} ${t(s.ai_enabled ? "adm.aiOn" : "adm.aiOff")}`;
 

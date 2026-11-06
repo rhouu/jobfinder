@@ -217,7 +217,7 @@ function openAlertDialog(filters) {
 function companiesPage() {
   initPage({ active: "companies" });
   const p = params();
-  const state = { q: p.q || "", sector: p.sector || "", page: +p.page || 1 };
+  const state = { q: p.q || "", city: p.city || "", sector: p.sector || "", page: +p.page || 1 };
   let hiring = [];
   const user = Auth.user();
   const sent = new Set(); // directory companies this student already emailed
@@ -231,7 +231,8 @@ function companiesPage() {
   // Companies with open offers (posted here or found on job boards)
   const drawHiring = () => {
     const q = state.q.toLowerCase();
-    const list = hiring.filter((c) => (!q || c.name.toLowerCase().includes(q)) && (!state.sector || c.sector === state.sector));
+    const list = hiring.filter((c) => (!q || c.name.toLowerCase().includes(q)) && (!state.sector || c.sector === state.sector)
+      && (!state.city || c.city === state.city));
     $("#hiringBlock").classList.toggle("hidden", !list.length);
     $("#hiringGrid").innerHTML = list.map((c, i) => `
       <a class="card card-hover dir-card fade-up" style="--d:${Math.min(i, 8) * 0.04}s" href="/jobs.html?company_id=${c.id}">
@@ -247,7 +248,7 @@ function companiesPage() {
   async function loadDirectory() {
     const id = ++requestId;
     $("#dirGrid").innerHTML = Array(6).fill('<div class="skeleton" style="height:280px"></div>').join("");
-    const qs = new URLSearchParams({ q: state.q, sector: state.sector, page: state.page });
+    const qs = new URLSearchParams({ q: state.q, city: state.city, sector: state.sector, page: state.page });
     let data;
     try { data = await API.get(`/api/directory?${qs}`); } catch (err) { $("#dirGrid").innerHTML = `<div class="empty">${esc(err.message)}</div>`; return; }
     if (id !== requestId) return;
@@ -256,6 +257,10 @@ function companiesPage() {
     $("#dSectors").innerHTML = [["", t("dir.allSectors"), total], ...Object.entries(data.sectors).sort((a, b) => b[1] - a[1]).map(([k, n]) => [k, sectorLabel(k), n])]
       .map(([k, label, n]) => `<button class="check-chip ${state.sector === k ? "active" : ""}" data-sector="${k}">${esc(label)} <span class="muted">${n}</span></button>`).join("");
     $$("#dSectors [data-sector]").forEach((b) => b.addEventListener("click", () => { Object.assign(state, { sector: b.dataset.sector, page: 1 }); refresh(); }));
+    const allCities = Object.values(data.cities).reduce((a, b) => a + b, 0);
+    $("#dCities").innerHTML = [["", t("dir.allCities"), allCities], ...Object.entries(data.cities).filter(([k, n]) => n >= 5 || k === state.city).sort((a, b) => b[1] - a[1]).map(([k, n]) => [k, k, n])]
+      .map(([k, label, n]) => `<button class="check-chip ${state.city === k ? "active" : ""}" data-city="${esc(k)}">${icon("pin", 13)} ${esc(label)} <span class="muted">${n}</span></button>`).join("");
+    $$("#dCities [data-city]").forEach((b) => b.addEventListener("click", () => { Object.assign(state, { city: b.dataset.city, sector: "", page: 1 }); refresh(); }));
     $("#dirGrid").innerHTML = data.items.length ? data.items.map((c, i) => `
       <article class="card dir-card fade-up" style="--d:${Math.min(i, 8) * 0.04}s">
         ${thumb(c.sector, `<span class="thumb-tag">${esc(sectorLabel(c.sector))}</span>`)}

@@ -495,15 +495,20 @@ def list_companies(db: Session = Depends(get_db)):
 
 
 @app.get("/api/directory")
-def company_directory(q: str = "", sector: str = "", page: int = 1, per_page: int = 24, db: Session = Depends(get_db)):
-    """Public company directory, searchable by name / category / area and filterable by sector."""
+def company_directory(q: str = "", sector: str = "", city: str = "", page: int = 1, per_page: int = 24,
+                      db: Session = Depends(get_db)):
+    """Public company directory, searchable by name / category / area and filterable by city and sector."""
     per_page, page = max(1, min(per_page, 60)), max(1, page)
     stmt = select(DirectoryCompany)
     if q.strip():
         like = f"%{q.strip()}%"
         stmt = stmt.where(or_(DirectoryCompany.name.ilike(like), DirectoryCompany.category.ilike(like),
                               DirectoryCompany.area.ilike(like)))
-    found = stmt.subquery()  # sector counts follow the search text (shown on the filter buttons)
+    searched = stmt.subquery()  # city counts follow the search text, sector counts the search text + city
+    cities = dict(db.execute(select(searched.c.city, func.count()).group_by(searched.c.city)).all())
+    if city:
+        stmt = stmt.where(DirectoryCompany.city == city)
+    found = stmt.subquery()
     sectors = dict(db.execute(select(found.c.sector, func.count()).group_by(found.c.sector)).all())
     if sector:
         stmt = stmt.where(DirectoryCompany.sector == sector)
@@ -511,7 +516,7 @@ def company_directory(q: str = "", sector: str = "", page: int = 1, per_page: in
     # Best known first: rating weighted by number of reviews, then name
     rows = db.scalars(stmt.order_by(DirectoryCompany.reviews.desc(), DirectoryCompany.name).offset((page - 1) * per_page).limit(per_page))
     return {"items": [c.to_dict() for c in rows], "total": total, "page": page, "pages": max(1, -(-total // per_page)),
-            "sectors": sectors}
+            "sectors": sectors, "cities": cities}
 
 
 # --------------------------------------------------------- spontaneous applications (email + CV)
@@ -1454,7 +1459,7 @@ def admin_stats(days: int = 30, _: User = Depends(admin_only), db: Session = Dep
         "jobs_by_sector": grouped(Job.sector, open_job),
         "applications_by_status": grouped(Application.status), "users_by_role": grouped(User.role),
         "recent_users": [u.public() for u in db.scalars(select(User).order_by(User.created_at.desc()).limit(6))],
-        "offers_refresh": {"enabled": bool(JOOBLE_API_KEY), "last": (db.get(Setting, "offers_refreshed_at") or Setting(value="")).value},
+        "offers_refresh": {"enabled": True, "jooble": bool(JOOBLE_API_KEY), "last": (db.get(Setting, "offers_refreshed_at") or Setting(value="")).value},
         "ai_enabled": ai.ai_available(),
     }
 
@@ -1475,9 +1480,7 @@ def admin_insights(_: User = Depends(admin_only), db: Session = Depends(get_db))
 
 @app.post("/api/admin/refresh-offers")
 def admin_refresh_offers(_: User = Depends(admin_only), db: Session = Depends(get_db)):
-    if not JOOBLE_API_KEY:
-        raise HTTPException(400, "Add JOOBLE_API_KEY in the server settings to fetch new offers.")
-    return _refresh_and_alert(db)
+    return _refresh_and_alert(db)  # Remotive needs no key; Jooble joins in when JOOBLE_API_KEY is set
 
 
 # Backup: every table as JSON (passwords stay hashed, files as base64). Keep the file somewhere safe.

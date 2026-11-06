@@ -4,11 +4,14 @@ SEED — runs on every start, but only fills empty tables (so it never duplicate
   2. data/offers.csv     real offers collected from Jooble. They are shown as external offers:
                          students apply on the original website ("Apply on Jooble").
   3. data/companies.csv  the public company directory (Marrakech). Public business info only, no contacts.
+     data/companies_osm.csv  employers in other cities from OpenStreetMap (backend/fetch_osm_directory.py);
+                         its new rows are added on every start, so re-running the script grows the directory.
   4. data/company_emails.csv  private emails of some directory companies (maps_url, email), used only to
                          send them spontaneous applications. Never shown on the site.
 
 FRESH OFFERS — refresh_offers() runs once a day (started by app.py): it asks Jooble's official API for new offers
-in Morocco, adds the ones we don't have yet, and closes job-board offers older than OFFER_MAX_DAYS.
+in Morocco (with JOOBLE_API_KEY) and Remotive's public API for remote jobs open worldwide (no key needed), adds the
+ones we don't have yet, and closes job-board offers older than OFFER_MAX_DAYS.
 """
 import csv
 import html
@@ -139,24 +142,67 @@ def fetch_jooble(keywords: str) -> list[dict]:
         return []
 
 
+# Remotive's public API: remote jobs, about a day old (https://remotive.com/api/remote-jobs). Its terms ask to name
+# Remotive as the source and link to its page for each job (the offer page shows "via Remotive" and "Apply on Remotive"),
+# and to call it at most a few times a day (the refresh runs once a day).
+REMOTE_PLACES = ("worldwide", "anywhere", "africa", "morocco", "maroc", "emea")
+REMOTE_TYPES = {"full_time": "CDI", "contract": "CDD", "part_time": "CDD", "freelance": "Freelance", "internship": "Stage"}
+
+
+def fetch_remotive() -> list[dict]:
+    """Remote jobs open to candidates in Morocco (worldwide, Africa, EMEA). [] on any problem."""
+    try:
+        r = requests.get("https://remotive.com/api/remote-jobs", headers={"User-Agent": "JobFinder.ma"}, timeout=25)
+        r.raise_for_status()
+        jobs = r.json().get("jobs") or []
+    except (requests.RequestException, ValueError) as exc:
+        log.warning("Remotive request failed: %s", exc)
+        return []
+    return [j for j in jobs if any(p in (j.get("candidate_required_location") or "").lower() for p in REMOTE_PLACES)]
+
+
 def refresh_offers(db) -> dict:
-    """Adds new Jooble offers we don't have yet and closes job-board offers that are too old."""
+    """Adds new Jooble and Remotive offers we don't have yet and closes job-board offers that are too old."""
     added = []
+    known = {_link_key(u) for u in db.scalars(select(Job.external_url).where(Job.external_url != ""))}
+    known_titles = {(t.lower(), c.lower()) for t, c in db.execute(select(Job.title, Company.name).join(Company))}
+    companies = {c.name.lower(): c for c in db.scalars(select(Company))}
+
+    def company_for(name: str, city: str, title: str) -> Company:
+        company = companies.get(name.lower())
+        if not company:
+            company = companies[name.lower()] = Company(name=name[:200], is_external=True, city=city,
+                                                        logo_color=_color(name), sector=guess_sector(f"{name} {title}"))
+            db.add(company)
+        return company
+
+    remote = fetch_remotive()
+    for item in remote:
+        url, title = item.get("url") or "", clean_text(item.get("title"))
+        name = clean_text(item.get("company_name")) or "Confidentiel"
+        if not url or not title or _link_key(url) in known or (title.lower(), name.lower()) in known_titles:
+            continue
+        try:
+            published = datetime.fromisoformat((item.get("publication_date") or "")[:19])
+        except ValueError:
+            published = None
+        text = clean_text(item.get("description"))
+        extract = text[:600] + ("..." if len(text) > 600 else "")
+        job = _job(company_for(name, "Télétravail", title), title, extract, "Télétravail", url, "Remotive", published)
+        job.work_mode, job.type = "Remote", REMOTE_TYPES.get(item.get("job_type"), "CDI")
+        db.add(job)
+        added.append(job)
+        known.add(_link_key(url))
+        known_titles.add((title.lower(), name.lower()))
+
     if JOOBLE_API_KEY:
-        known = {_link_key(u) for u in db.scalars(select(Job.external_url).where(Job.external_url != ""))}
-        known_titles = {(t.lower(), c.lower()) for t, c in db.execute(select(Job.title, Company.name).join(Company))}
-        companies = {c.name.lower(): c for c in db.scalars(select(Company))}
         for kw in JOOBLE_KEYWORDS:
             for item in fetch_jooble(kw):
                 url, title = item.get("link") or "", clean_text(item.get("title"))
                 name = clean_text(item.get("company")) or "Confidentiel"
                 if not url or not title or _link_key(url) in known or (title.lower(), name.lower()) in known_titles:
                     continue
-                company = companies.get(name.lower())
-                if not company:
-                    company = companies[name.lower()] = Company(name=name[:200], is_external=True, city=_city(item.get("location")),
-                                                                logo_color=_color(name), sector=guess_sector(f"{name} {title}"))
-                    db.add(company)
+                company = company_for(name, _city(item.get("location")), title)
                 try:
                     published = datetime.fromisoformat((item.get("updated") or "")[:19])
                 except ValueError:
@@ -166,12 +212,12 @@ def refresh_offers(db) -> dict:
                 added.append(job)
                 known.add(_link_key(url))
                 known_titles.add((title.lower(), name.lower()))
-    old = []
-    if JOOBLE_API_KEY:  # only close old offers while new ones keep coming in, so the site never empties
-        limit = utcnow() - timedelta(days=OFFER_MAX_DAYS)
-        old = db.scalars(select(Job).where(Job.status == "open", Job.source != "", Job.created_at < limit)).all()
-        for job in old:
-            job.status = "closed"
+    # Close old offers only from a source that is still sending new ones, so the site never empties
+    live = [s for s, on in (("Jooble", bool(JOOBLE_API_KEY)), ("Remotive", bool(remote))) if on]
+    limit = utcnow() - timedelta(days=OFFER_MAX_DAYS)
+    old = db.scalars(select(Job).where(Job.status == "open", Job.source.in_(live), Job.created_at < limit)).all() if live else []
+    for job in old:
+        job.status = "closed"
     row = db.get(Setting, "offers_refreshed_at") or Setting(key="offers_refreshed_at")
     row.value = utcnow().isoformat()
     db.merge(row)
@@ -185,11 +231,13 @@ def refresh_due(db) -> bool:
     return not row or utcnow() - datetime.fromisoformat(row.value) > timedelta(hours=24)
 
 
-def import_directory(db) -> int:
-    path = DATA_DIR / "companies.csv"
+def import_directory(db, file: str = "companies.csv") -> int:
+    """Adds the companies of a data/ file to the directory, skipping the ones already there (same maps_url)."""
+    path = DATA_DIR / file
     if not path.exists():
         return 0
-    rows = list(csv.DictReader(open(path, encoding="utf-8", newline="")))
+    known = set(db.scalars(select(DirectoryCompany.maps_url)))
+    rows = [r for r in csv.DictReader(open(path, encoding="utf-8", newline="")) if r["maps_url"] not in known]
     as_float = lambda v: float(v) if v else None
     for r in rows:
         db.add(DirectoryCompany(name=r["name"], sector=directory_sector(r["category"], r["specialty"], r["name"]), category=r["category"],
@@ -223,6 +271,10 @@ def seed() -> None:
             log.info("Imported %d offers from data/offers.csv", import_offers(db))
         if not db.scalar(select(func.count(DirectoryCompany.id))):
             log.info("Imported %d companies from data/companies.csv", import_directory(db))
+            db.flush()
+        added = import_directory(db, "companies_osm.csv")  # other cities, from OpenStreetMap; new rows only
+        if added:
+            log.info("Added %d companies from data/companies_osm.csv", added)
             db.flush()
         for job in db.scalars(select(Job).where(Job.title.contains("amp;") | Job.description.contains("amp;"))):
             job.title, job.description = clean_text(job.title), clean_text(job.description)
