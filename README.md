@@ -69,6 +69,11 @@ Free Render services sleep after 15 minutes without visitors (the first visit th
   factories, coworking spaces) in Casablanca, Rabat, Tanger, Fès, Agadir and Meknès from OpenStreetMap into
   `data/companies_osm.csv`; the site adds the new ones to the directory on its next start. Run it again to refresh.
   Data © OpenStreetMap contributors (ODbL), credited on the companies page.
+- **Data pipeline.** `python -m backend.data_pipeline collect` saves every source exactly as it comes into
+  `data/raw/` (Jooble and Google Maps files from the leadfinder scraper, OpenStreetMap and Remotive downloads);
+  `python -m backend.data_pipeline clean` writes the cleaned files to `data/clean/`, with `cleaning_log.csv`
+  (rows removed at each step) and `rejected_rows.csv` (every removed row and why). Both folders stay out of git:
+  the raw files hold phone numbers and emails.
 - **Google for Jobs.** Each offer page is sent with a schema.org `JobPosting` block, so Google can show it in its job
   search. `/sitemap.xml` lists every open offer and `/robots.txt` points to it. After going live, add the sitemap in
   Google Search Console.
