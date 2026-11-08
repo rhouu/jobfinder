@@ -512,134 +512,22 @@ function jobPage() {
 }
 
 // ============================================================ Sign in / register / password / verification
-/** Sign-in page, left panel: four characters. Their eyes follow the mouse, they look at the field you type in,
-    look away while you type a password, and the tall one peeks when the password is shown. */
-function authCharacters() {
-  const scene = $("#chars");
-  if (!scene) return;
-  const chars = $$("[data-ch]", scene);
-  const pw = $("#password");
-  let mode = "follow", pointer = null, shown = false, flash = null;
-
-  // Mouths: each shape is a closed lip outline "M x1 y1 Q cx cy x2 y2 Q cx cy x1 y1" in a 40x24 box.
-  // Shapes share the same numbers, so one can morph smoothly into another.
-  const MOUTHS = {
-    line: [7, 11, 20, 11, 33, 11, 20, 14, 7, 11],    smile: [6, 8, 20, 18, 34, 8, 20, 21, 6, 8],
-    grin: [5, 7, 20, 9, 35, 7, 20, 31, 5, 7],         oh: [14, 11, 20, 2, 26, 11, 20, 20, 14, 11],
-    frown: [8, 16, 20, 5, 32, 16, 20, 9, 8, 16],      tight: [12, 12, 20, 10, 28, 12, 20, 13.5, 12, 12],
-    smirk: [8, 12, 23, 16, 33, 6, 22, 19, 8, 12],     soft: [9, 10, 20, 15, 31, 10, 20, 17, 9, 10],
-  };
-  // Who makes which face in each mood
-  const FACES = {
-    follow: { tall: "soft", dark: "line", yellow: "line", orange: "smile" },
-    field: { tall: "oh", dark: "smile", yellow: "oh", orange: "smile" },
-    shy: { tall: "tight", dark: "tight", yellow: "tight", orange: "tight" },
-    peek: { tall: "smirk", dark: "tight", yellow: "tight", orange: "tight" },
-    sad: { tall: "frown", dark: "frown", yellow: "frown", orange: "frown" },
-    happy: { tall: "grin", dark: "grin", yellow: "grin", orange: "grin" },
-  };
-  const toPath = (n) => `M${n[0]} ${n[1]} Q${n[2]} ${n[3]} ${n[4]} ${n[5]} Q${n[6]} ${n[7]} ${n[8]} ${n[9]}Z`;
-  const setMouth = (ch, shape) => {
-    const path = ch.querySelector(".mouth path"), to = MOUTHS[shape], from = ch._mouth || to;
-    if (ch._shape === shape) return;
-    ch._shape = shape;
-    const start = performance.now();
-    const step = (now) => {
-      const k = Math.min(1, (now - start) / 260), e = 1 - (1 - k) ** 3; // ease-out
-      ch._mouth = from.map((v, i) => v + (to[i] - v) * e);
-      path.setAttribute("d", toPath(ch._mouth));
-      if (k < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  };
-  const setMood = () => {
-    const mood = flash || (mode === "field" ? "field" : mode === "shy" ? "shy" : mode === "peek" ? "peek" : "follow");
-    scene.dataset.mood = mood;
-    chars.forEach((ch) => setMouth(ch, FACES[mood][ch.dataset.ch]));
-  };
-
-  // Where the eyes should look: the mouse, the end of the text being typed, or away from the form
-  const lookAt = (x, y) => chars.forEach((ch) => {
-    const r = ch.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + Math.min(90, r.height / 3);
-    const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy) || 1;
-    ch.style.setProperty("--lean", `${Math.max(-8, Math.min(8, dx / 70)).toFixed(1)}deg`);
-    ch.style.setProperty("--fx", `${((dx / d) * 9).toFixed(1)}px`);
-    ch.style.setProperty("--fy", `${((dy / d) * 6).toFixed(1)}px`);
-    $$(".eye i", ch).forEach((pupil) => {
-      const m = pupil.parentElement.offsetWidth / 5; // bigger eyes, bigger movement
-      pupil.style.transform = `translate(${((dx / d) * m).toFixed(1)}px, ${((dy / d) * m).toFixed(1)}px)`;
-    });
-  });
-  const measure = document.createElement("canvas").getContext("2d");
-  const caret = (input) => { // roughly where the text ends inside the field
-    const r = input.getBoundingClientRect(), cs = getComputedStyle(input);
-    measure.font = `${cs.fontSize} ${cs.fontFamily}`;
-    const text = input.type === "password" ? "•".repeat(input.value.length) : input.value;
-    return [Math.min(r.right - 16, r.left + 14 + measure.measureText(text).width), r.top + r.height / 2];
-  };
-  const formCentre = () => { const r = $(".auth-card:not(.hidden)")?.getBoundingClientRect(); return r ? [r.left + r.width / 2, r.top + 120] : [innerWidth * 0.75, innerHeight / 2]; };
-  const update = () => {
-    setMood();
-    scene.classList.toggle("shy", mode === "shy" || mode === "peek");
-    scene.classList.toggle("peek", mode === "peek");
-    const field = document.activeElement;
-    if (mode === "shy" || mode === "peek") {
-      const r = scene.getBoundingClientRect();
-      lookAt(r.left - 300, r.top - 260); // look away, up and to the left
-      if (mode === "peek") { const ch = scene.querySelector(".ch-tall"), [x, y] = caret(pw); peekAt(ch, x, y); }
-    } else if (mode === "field" && field?.matches?.("input")) lookAt(...caret(field));
-    else if (pointer) lookAt(...pointer);
-    else lookAt(...formCentre());
-  };
-  const peekAt = (ch, x, y) => { // the tall one turns back to read the shown password
-    const r = ch.getBoundingClientRect(), dx = x - (r.left + r.width / 2), dy = y - (r.top + 80), d = Math.hypot(dx, dy) || 1;
-    ch.style.setProperty("--lean", "6deg");
-    ch.style.setProperty("--fx", `${((dx / d) * 12).toFixed(1)}px`);
-    ch.style.setProperty("--fy", `${((dy / d) * 6).toFixed(1)}px`);
-    $$(".eye i", ch).forEach((p) => (p.style.transform = `translate(${((dx / d) * 4).toFixed(1)}px, ${((dy / d) * 4).toFixed(1)}px)`));
-  };
-
-  document.addEventListener("pointermove", (e) => { pointer = [e.clientX, e.clientY]; if (mode === "follow") update(); }, { passive: true });
-  document.addEventListener("focusin", (e) => {
-    if (e.target === pw) mode = shown ? "peek" : "shy";
-    else if (e.target.matches("input:not([type=checkbox]):not([type=radio]), textarea")) mode = "field";
-    else return;
-    update();
-  });
-  document.addEventListener("focusout", () => setTimeout(() => { if (!document.activeElement?.matches?.("input, textarea")) { mode = "follow"; update(); } }));
-  document.addEventListener("input", (e) => { if (e.target.matches?.("input")) update(); });
-  addEventListener("resize", update);
-
-  // Show / hide the password (the tall one peeks while it is shown)
-  $("#pwEye")?.addEventListener("click", () => {
-    shown = !shown;
+/** Show / hide the password */
+function passwordEye() {
+  const pw = $("#password"), btn = $("#pwEye");
+  if (!pw || !btn) return;
+  btn.addEventListener("click", () => {
+    const shown = pw.type === "password";
     pw.type = shown ? "text" : "password";
-    $("#pwEye").innerHTML = icon(shown ? "eyeOff" : "eye", 18);
-    $("#pwEye").setAttribute("aria-label", t(shown ? "auth.hidePw" : "auth.showPw"));
+    btn.innerHTML = icon(shown ? "eyeOff" : "eye", 18);
+    btn.setAttribute("aria-label", t(shown ? "auth.hidePw" : "auth.showPw"));
     pw.focus();
-    mode = shown ? "peek" : "shy";
-    update();
   });
-
-  // Blinking, a little shake after a wrong password, a hop when signed in
-  chars.forEach((ch) => {
-    const blink = () => { ch.classList.add("blink"); setTimeout(() => ch.classList.remove("blink"), 160); setTimeout(blink, 2500 + Math.random() * 4000); };
-    setTimeout(blink, 800 + Math.random() * 3000);
-  });
-  const play = (cls, ms) => {
-    flash = cls;
-    setMood();
-    scene.classList.remove(cls); void scene.offsetWidth; scene.classList.add(cls);
-    setTimeout(() => { scene.classList.remove(cls); flash = null; setMood(); }, ms + 600); // keep the face a moment longer
-  };
-  window.authCharsSad = () => play("sad", 700);
-  window.authCharsHappy = () => play("happy", 900);
-  update();
 }
 
 function authPage() {
   initPage({ footer: false, chat: false });
-  authCharacters();
+  passwordEye();
   const p = params();
   const next = p.next && p.next.startsWith("/") && !p.next.startsWith("//") ? p.next : null;
   const cards = ["mainCard", "forgotCard", "resetCard", "verifyCard", "codeCard"];
@@ -647,7 +535,6 @@ function authPage() {
 
   const done = (data) => {
     if (data.needs_code) return askCode(data.email);
-    window.authCharsHappy?.();
     Auth.save(data);
     toast(t("auth.welcome", { name: data.user.name.split(" ")[0] }, true), "success");
     setTimeout(() => location.replace(next || Auth.home(data.user.role)), 400);
@@ -710,7 +597,7 @@ function authPage() {
         done(mode === "register"
           ? await API.post("/api/auth/register", { name: f.name, email: f.email, password: f.password, role: role(), company_name: f.company_name || null, language: LANG })
           : await API.post("/api/auth/login", { email: f.email, password: f.password }));
-      } catch (err) { toast(err.message, "error"); window.authCharsSad?.(); }
+      } catch (err) { toast(err.message, "error"); }
     });
   });
 
@@ -739,7 +626,7 @@ function authPage() {
     $("#codeSubmit").disabled = value.length < 6;
   }
   function wrongCode(message) {
-    window.authCharsSad?.();
+   
     setCode("");
     $("#codeError").textContent = message;
     void $("#codeField").offsetWidth; // restarts the shake

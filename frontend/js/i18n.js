@@ -410,6 +410,11 @@ const T = {
   "reviews.thanks": ["Thank you for your review!", "Merci pour votre avis !", "شكرًا على رأيك!"],
 
   // ---------------------------------------------------------------- sign in / register
+  "auth.sideTitle": ["Your career in Morocco <span class=\"grad-text\">starts here.</span>", "Votre carrière au Maroc <span class=\"grad-text\">commence ici.</span>", "مسارك المهني في المغرب <span class=\"grad-text\">يبدأ هنا.</span>"],
+  "auth.sideSub": ["Find internships, PFE and first jobs at verified companies.", "Trouvez stages, PFE et premiers emplois dans des entreprises vérifiées.", "اعثر على تداريب ومشاريع تخرج وأول وظيفة في شركات موثّقة."],
+  "auth.p1": ["AI CV, cover letter, portfolio and mock interviews", "CV, lettre, portfolio et entretiens avec l'IA", "سيرة ذاتية ورسالة وموقع ومقابلات بالذكاء الاصطناعي"],
+  "auth.p2": ["Offers ranked by your match score", "Offres classées selon votre profil", "عروض مرتبة حسب نسبة المطابقة"],
+  "auth.p3": ["Track applications and chat with recruiters", "Suivi des candidatures et messagerie", "تتبع الطلبات والتواصل مع المشغّلين"],
   "auth.showPw": ["Show password", "Afficher le mot de passe", "إظهار كلمة المرور"],
   "auth.hidePw": ["Hide password", "Masquer le mot de passe", "إخفاء كلمة المرور"],
   "auth.create": ["Create account", "Créer un compte", "إنشاء حساب"],

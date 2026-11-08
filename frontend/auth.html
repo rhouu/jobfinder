@@ -14,17 +14,12 @@
   <script src="/js/i18n.js"></script>
 </head>
 <body data-page="auth">
-  <main class="auth-wrap auth-v2">
-    <!-- Left: four characters whose eyes follow the mouse; they look at what you type and look away from passwords -->
-    <section class="auth-side auth-chars" aria-hidden="true">
-      <div class="chars-stage">
-        <div class="chars" id="chars">
-          <div class="ch ch-tall" data-ch="tall"><div class="face"><div class="brows"><i></i><i></i></div><div class="eyes"><span class="eye"><i></i></span><span class="eye"><i></i></span></div><svg class="mouth" viewBox="0 0 40 24" aria-hidden="true"><path d=""/></svg></div></div>
-          <div class="ch ch-dark" data-ch="dark"><div class="face"><div class="eyes"><span class="eye"><i></i></span><span class="eye"><i></i></span></div><svg class="mouth" viewBox="0 0 40 24" aria-hidden="true"><path d=""/></svg></div></div>
-          <div class="ch ch-yellow" data-ch="yellow"><div class="face"><div class="brows"><i></i><i></i></div><div class="eyes"><span class="eye"><i></i></span><span class="eye"><i></i></span></div><div class="blush"><i></i><i></i></div><svg class="mouth" viewBox="0 0 40 24" aria-hidden="true"><path d=""/></svg></div></div>
-          <div class="ch ch-orange" data-ch="orange"><div class="face"><div class="brows"><i></i><i></i></div><div class="eyes"><span class="eye"><i></i></span><span class="eye"><i></i></span></div><div class="blush"><i></i><i></i></div><svg class="mouth" viewBox="0 0 40 24" aria-hidden="true"><path d=""/></svg></div></div>
-        </div>
-      </div>
+  <main class="auth-wrap photo-bg" style="--photo:url('https://images.unsplash.com/photo-1758270705290-62b6294dd044?auto=format&fit=crop&w=1920&q=65')">
+    <section class="auth-side">
+      <span class="eyebrow fade-up"><span class="dot"></span> <span data-i18n="home.copilot"></span></span>
+      <h2 class="fade-up" style="--d:.1s" data-i18n-html="auth.sideTitle"></h2>
+      <p class="muted fade-up" style="--d:.2s;max-width:440px;font-size:1.05rem" data-i18n="auth.sideSub"></p>
+      <ul class="check-list fade-up" style="--d:.3s"><li data-i18n="auth.p1"></li><li data-i18n="auth.p2"></li><li data-i18n="auth.p3"></li></ul>
     </section>
 
     <section class="auth-form-wrap">
