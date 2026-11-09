@@ -479,7 +479,7 @@ def get_job(job_id: int, user: User | None = Depends(optional_user), db: Session
 def public_stats(db: Session = Depends(get_db)):
     return {"jobs": db.scalar(select(func.count(Job.id)).where(Job.status == "open")),
             "internships": db.scalar(select(func.count(Job.id)).where(Job.status == "open", Job.type.in_(["Stage", "PFE"]))),
-            "companies": db.scalar(select(func.count(Company.id))),
+            "companies": db.scalar(select(func.count(func.distinct(Job.company_id))).where(Job.status == "open")),  # hiring now
             "directory": db.scalar(select(func.count(DirectoryCompany.id))),
             "students": db.scalar(select(func.count(User.id)).where(User.role == "student")),
             "cities": db.scalar(select(func.count(func.distinct(Job.city))).where(Job.status == "open"))}
