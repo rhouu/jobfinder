@@ -132,11 +132,12 @@ def _link_key(url: str) -> str:
     return (url or "").split("?")[0].rstrip("/").lower()  # same offer even if the tracking part of the link changes
 
 
-def fetch_jooble(keywords: str, report: dict | None = None) -> list[dict]:
+def fetch_jooble(keywords: str, report: dict | None = None, host: str = "", location: str | None = None) -> list[dict]:
     """One search on Jooble's REST API. Returns its "jobs" list ([] on any problem).
     `report` gets, per search word, the number of offers returned or the error (saved for the admin)."""
     try:
-        r = requests.post(f"https://{JOOBLE_HOST}/api/{JOOBLE_API_KEY}", json={"keywords": keywords, "location": JOOBLE_LOCATION}, timeout=25)
+        host, location = host or JOOBLE_HOST, JOOBLE_LOCATION if location is None else location
+        r = requests.post(f"https://{host}/api/{JOOBLE_API_KEY}", json={"keywords": keywords, "location": location}, timeout=25)
         r.raise_for_status()
         jobs = r.json().get("jobs") or []
         if report is not None:
@@ -150,6 +151,23 @@ def fetch_jooble(keywords: str, report: dict | None = None) -> list[dict]:
             report[keywords] = problem
         return []
 
+
+
+def jooble_best_setup(probe: dict) -> tuple[str, str]:
+    """One test search ("stage") per address and place; keeps the pair that returns the most offers.
+    A Jooble key can be tied to a country site, and the place has to be written the way that site expects."""
+    hosts = list(dict.fromkeys([JOOBLE_HOST, "ma.jooble.org", "jooble.org"]))
+    places = list(dict.fromkeys([JOOBLE_LOCATION, "Maroc", "Morocco", "Casablanca", ""]))
+    best, best_n = (JOOBLE_HOST, JOOBLE_LOCATION), -1
+    for host in hosts:
+        for place in places:
+            found: dict = {}
+            n = len(fetch_jooble("stage", found, host, place))
+            probe[f"{host} / {place or '(no place)'}"] = found.get("stage", n)
+            if n > best_n:
+                best, best_n = (host, place), n
+    probe["chosen"] = f"{best[0]} / {best[1] or '(no place)'}"
+    return best
 
 # Remotive's public API: remote jobs, about a day old (https://remotive.com/api/remote-jobs). Its terms ask to name
 # Remotive as the source and link to its page for each job (the offer page shows "via Remotive" and "Apply on Remotive"),
@@ -205,9 +223,11 @@ def refresh_offers(db) -> dict:
         known_titles.add((title.lower(), name.lower()))
 
     jooble_report: dict = {}
+    jooble_setup: dict = {}
     if JOOBLE_API_KEY:
+        host, place = jooble_best_setup(jooble_setup)
         for kw in JOOBLE_KEYWORDS:
-            for item in fetch_jooble(kw, jooble_report):
+            for item in fetch_jooble(kw, jooble_report, host, place):
                 url, title = item.get("link") or "", clean_text(item.get("title"))
                 name = clean_text(item.get("company")) or "Confidentiel"
                 if not url or not title or _link_key(url) in known or (title.lower(), name.lower()) in known_titles:
@@ -233,7 +253,7 @@ def refresh_offers(db) -> dict:
     db.merge(row)
     # What each source sent, so a problem (wrong key, no results) shows up without reading the server logs
     report = db.get(Setting, "offers_refresh_report") or Setting(key="offers_refresh_report")
-    report.value = json.dumps({"jooble_key": bool(JOOBLE_API_KEY), "jooble_location": JOOBLE_LOCATION, "jooble": jooble_report,
+    report.value = json.dumps({"jooble_key": bool(JOOBLE_API_KEY), "jooble_location": JOOBLE_LOCATION, "jooble_probe": jooble_setup, "jooble": jooble_report,
                                "remotive": len(remote), "added": len(added), "closed": len(old)}, ensure_ascii=False)
     db.merge(report)
     db.commit()
