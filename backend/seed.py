@@ -212,10 +212,10 @@ def refresh_offers(db) -> dict:
                 added.append(job)
                 known.add(_link_key(url))
                 known_titles.add((title.lower(), name.lower()))
-    # Close old offers only from a source that is still sending new ones, so the site never empties
-    live = [s for s, on in (("Jooble", bool(JOOBLE_API_KEY)), ("Remotive", bool(remote))) if on]
+    # Job-board offers older than OFFER_MAX_DAYS are most likely filled and their links dead: close them.
+    # (Jooble refuses automated visits, so a link can't be tested; the publication date is the only signal.)
     limit = utcnow() - timedelta(days=OFFER_MAX_DAYS)
-    old = db.scalars(select(Job).where(Job.status == "open", Job.source.in_(live), Job.created_at < limit)).all() if live else []
+    old = db.scalars(select(Job).where(Job.status == "open", Job.external_url != "", Job.created_at < limit)).all()
     for job in old:
         job.status = "closed"
     row = db.get(Setting, "offers_refreshed_at") or Setting(key="offers_refreshed_at")

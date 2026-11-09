@@ -8,3 +8,5 @@ jobfinder.db
 *.db-journal
 .DS_Store
 
+
+.migrate.env
