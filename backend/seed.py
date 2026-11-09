@@ -14,6 +14,7 @@ in Morocco (with JOOBLE_API_KEY) and Remotive's public API for remote jobs open 
 ones we don't have yet, and closes job-board offers older than OFFER_MAX_DAYS.
 """
 import csv
+import json
 import html
 import logging
 import re
@@ -131,14 +132,22 @@ def _link_key(url: str) -> str:
     return (url or "").split("?")[0].rstrip("/").lower()  # same offer even if the tracking part of the link changes
 
 
-def fetch_jooble(keywords: str) -> list[dict]:
-    """One search on Jooble's REST API. Returns its "jobs" list ([] on any problem)."""
+def fetch_jooble(keywords: str, report: dict | None = None) -> list[dict]:
+    """One search on Jooble's REST API. Returns its "jobs" list ([] on any problem).
+    `report` gets, per search word, the number of offers returned or the error (saved for the admin)."""
     try:
         r = requests.post(f"https://{JOOBLE_HOST}/api/{JOOBLE_API_KEY}", json={"keywords": keywords, "location": JOOBLE_LOCATION}, timeout=25)
         r.raise_for_status()
-        return r.json().get("jobs") or []
+        jobs = r.json().get("jobs") or []
+        if report is not None:
+            report[keywords] = len(jobs)
+        return jobs
     except (requests.RequestException, ValueError) as exc:
-        log.warning("Jooble search %r failed: %s", keywords, exc)
+        status = getattr(getattr(exc, "response", None), "status_code", "")
+        problem = f"error {status} {type(exc).__name__}".strip()  # never the exception text: it holds the URL, so the key
+        log.warning("Jooble search %r failed: %s", keywords, problem)
+        if report is not None:
+            report[keywords] = problem
         return []
 
 
@@ -195,9 +204,10 @@ def refresh_offers(db) -> dict:
         known.add(_link_key(url))
         known_titles.add((title.lower(), name.lower()))
 
+    jooble_report: dict = {}
     if JOOBLE_API_KEY:
         for kw in JOOBLE_KEYWORDS:
-            for item in fetch_jooble(kw):
+            for item in fetch_jooble(kw, jooble_report):
                 url, title = item.get("link") or "", clean_text(item.get("title"))
                 name = clean_text(item.get("company")) or "Confidentiel"
                 if not url or not title or _link_key(url) in known or (title.lower(), name.lower()) in known_titles:
@@ -221,6 +231,11 @@ def refresh_offers(db) -> dict:
     row = db.get(Setting, "offers_refreshed_at") or Setting(key="offers_refreshed_at")
     row.value = utcnow().isoformat()
     db.merge(row)
+    # What each source sent, so a problem (wrong key, no results) shows up without reading the server logs
+    report = db.get(Setting, "offers_refresh_report") or Setting(key="offers_refresh_report")
+    report.value = json.dumps({"jooble_key": bool(JOOBLE_API_KEY), "jooble_location": JOOBLE_LOCATION, "jooble": jooble_report,
+                               "remotive": len(remote), "added": len(added), "closed": len(old)}, ensure_ascii=False)
+    db.merge(report)
     db.commit()
     log.info("Offers refreshed: %d added, %d closed", len(added), len(old))
     return {"added": added, "closed": len(old)}

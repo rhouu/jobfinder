@@ -1459,7 +1459,8 @@ def admin_stats(days: int = 30, _: User = Depends(admin_only), db: Session = Dep
         "jobs_by_sector": grouped(Job.sector, open_job),
         "applications_by_status": grouped(Application.status), "users_by_role": grouped(User.role),
         "recent_users": [u.public() for u in db.scalars(select(User).order_by(User.created_at.desc()).limit(6))],
-        "offers_refresh": {"enabled": True, "jooble": bool(JOOBLE_API_KEY), "last": (db.get(Setting, "offers_refreshed_at") or Setting(value="")).value},
+        "offers_refresh": {"enabled": True, "jooble": bool(JOOBLE_API_KEY), "last": (db.get(Setting, "offers_refreshed_at") or Setting(value="")).value,
+                           "report": json.loads((db.get(Setting, "offers_refresh_report") or Setting(value="{}")).value or "{}")},
         "ai_enabled": ai.ai_available(),
     }
 

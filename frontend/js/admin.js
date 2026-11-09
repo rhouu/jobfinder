@@ -83,7 +83,10 @@ async function loadStats() {
     $("#tDirectory").textContent = t("adm.inDirectory", { d: fmt.format(tot.directory), e: tot.external_companies });
     $("#pendingCount").textContent = tot.pending_verifications;
     const r = s.offers_refresh;
-    $("#refreshInfo").textContent = [!r.jooble ? t("adm.refreshRemoteOnly") : "", r.last ? t("adm.refreshLast", { when: timeAgo(r.last + "Z") }) : ""].filter(Boolean).join(" · ");
+    // Jooble per search word: number of offers, or the error it sent back
+    const jooble = Object.entries(r.report?.jooble || {}).map(([k, v]) => `${k}: ${v}`).join(", ");
+    $("#refreshInfo").textContent = [!r.jooble ? t("adm.refreshRemoteOnly") : "", r.last ? t("adm.refreshLast", { when: timeAgo(r.last + "Z") }) : "",
+      jooble ? `Jooble — ${jooble}` : "", r.report?.remotive != null ? `Remotive — ${r.report.remotive}` : ""].filter(Boolean).join(" · ");
     $("#aiBadge").className = `badge ${s.ai_enabled ? "badge-green" : "badge-gold"}`;
     $("#aiBadge").innerHTML = `${icon("spark", 14)} ${t(s.ai_enabled ? "adm.aiOn" : "adm.aiOff")}`;
 
