@@ -390,8 +390,10 @@ function jobPage() {
     return externalApply();
   }
 
-  /** Job-board offer (company not on JobFinder): the application is emailed to the company when we know its address,
-      otherwise the original offer opens and the application is added to "My applications" to track it. */
+  /** Job-board offer (company not on JobFinder): the student applies with the form on JobFinder (letter + CV).
+      The application is emailed to the company when we know its address; otherwise it is saved here and the
+      form then points to the original offer, where the company receives applications. */
+  const byEmail = () => job.apply_by_email && !job.email_missing.includes("verify"); // the CV can be added in the form
   function externalApply() {
     const vars = { source: job.source, company: job.company.name };
     if (job.applied) {
@@ -400,16 +402,12 @@ function jobPage() {
         ${job.delivery === "source" && job.external_url ? sourceLink("job.openSource") : ""}
         <a class="btn btn-ghost btn-block" href="/dashboard.html#applications" style="margin-top:10px">${t("job.track")}</a>`;
     }
-    const byEmail = job.apply_by_email && !job.email_missing.length;
-    if (!byEmail && !job.external_url) return mainApply(); // no address and no original link: applies here only
-    const button = byEmail
-      ? `<button class="btn btn-primary btn-block btn-lg" id="applyBtn">${t("job.apply")}</button>`
-      : `<button class="btn btn-primary btn-block btn-lg" id="applySourceBtn">${t("job.applyOn", vars)} ${icon("arrow", 16)}</button>`;
-    const hint = job.apply_by_email && job.email_missing.length
-      ? `<p class="small" style="margin-top:8px"><a class="grad-text" href="/dashboard.html#profile">${t("job.emailMissing", vars)}</a></p>` : "";
-    return `${button}
+    const hint = job.apply_by_email && job.email_missing.includes("verify")
+      ? `<p class="small" style="margin-top:8px"><a class="grad-text" href="/dashboard.html">${t("job.emailNeedsVerify", vars)}</a></p>` : "";
+    return `<button class="btn btn-primary btn-block btn-lg" id="applyBtn">${t("job.apply")}</button>
       <button class="btn btn-ghost btn-block" id="saveBtn" style="margin-top:10px">${icon("bookmark", 16)} <span>${t(job.saved ? "job.saved" : "job.save")}</span></button>
-      <div class="external-apply"><p class="muted small">${t(byEmail ? "job.emailInfo" : "job.sourceInfo", vars)}</p>${hint}</div>`;
+      <div class="external-apply"><p class="muted small">${t(byEmail() ? "job.emailInfo" : "job.formSourceInfo", vars)}</p>${hint}
+        ${job.external_url ? sourceLink("job.applyExternal") : ""}</div>`;
   }
 
   /** Phones and tablets: the apply box sits at the very bottom of the page, so a bar fixed at the bottom
@@ -417,7 +415,7 @@ function jobPage() {
   function drawApplyBar() {
     $(".apply-bar")?.remove();
     document.body.classList.remove("has-apply-bar");
-    const main = $("#applyBtn, #applySourceBtn");
+    const main = $("#applyBtn");
     const signIn = !user ? $(".sticky-side a.btn-primary") : null;
     let html = "";
     if (main) html = `<button class="btn btn-primary btn-block" id="barApply">${main.innerHTML}</button>`;
@@ -430,16 +428,6 @@ function jobPage() {
     document.body.appendChild(bar);
     document.body.classList.add("has-apply-bar");
     $("#barApply")?.addEventListener("click", () => main.click());
-  }
-
-  async function applyOnSource() {
-    window.open(job.external_url, "_blank", "noopener"); // opened right away (inside the click) so browsers don't block it
-    try {
-      await API.post("/api/student/applications", { job_id: job.id, cover_letter: "" });
-      Object.assign(job, { applied: true, delivery: "source", applicants: job.applicants + 1 });
-      toast(t("job.sourceAdded", { source: job.source }), "success");
-      render();
-    } catch (err) { toast(err.message, "error"); }
   }
 
   function mainApply() {
@@ -521,7 +509,6 @@ function jobPage() {
     animateRings();
     bindJobCards($("#jobRoot"));
     $("#applyBtn")?.addEventListener("click", openApply);
-    $("#applySourceBtn")?.addEventListener("click", applyOnSource);
     drawApplyBar();
     $("#copyLink").addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(`${location.origin}/job.html?id=${job.id}`); toast(t("job.linkCopied"), "success"); }
@@ -538,26 +525,48 @@ function jobPage() {
   }
 
   function openApply() {
+    const vars = { company: job.company.name, source: job.source };
+    const info = !job.company.external ? "job.applyInfo" : byEmail() ? "job.emailInfo" : "job.formSourceInfo";
     modal({
       title: `${t("job.apply")} — ${job.title}`,
-      body: `<p class="muted" style="margin-bottom:16px">${t(job.apply_by_email ? "job.emailInfo" : "job.applyInfo", { company: job.company.name })}</p>
-        <div class="field"><label for="cover">${t("job.cover")}</label><textarea class="textarea" id="cover" rows="10"></textarea></div>
-        <button class="btn btn-ghost btn-sm" id="genCover" style="margin-top:10px">${icon("spark", 15)} ${t("job.coverAi")}</button>`,
+      body: `<p class="muted" style="margin-bottom:16px">${t(info, vars)}</p>
+        <div class="field"><label for="cover">${t("job.cover")}</label><textarea class="textarea" id="cover" rows="9"></textarea></div>
+        <button class="btn btn-ghost btn-sm" id="genCover" style="margin-top:10px">${icon("spark", 15)} ${t("job.coverAi")}</button>
+        <div class="field" style="margin-top:18px"><label for="cvInput">${t("job.cvLabel")}</label>
+          <div class="muted small" id="cvState">${t("common.loading")}</div>
+          <input type="file" id="cvInput" class="input" accept="application/pdf" style="margin-top:6px"></div>`,
       footer: `<button class="btn btn-ghost" data-close>${t("common.cancel")}</button><button class="btn btn-primary" id="sendApp">${t("job.submit")}</button>`,
       onOpen: (el, close) => {
+        // Saved CV (sent by email to companies we can reach); the student can add or replace it here
+        API.get("/api/student/cv-file").then((cv) => {
+          $("#cvState", el).innerHTML = cv ? `${icon("check", 14)} ${t("job.cvSaved", { name: cv.name })}` : t("job.cvNone");
+        }).catch(() => { $("#cvState", el).textContent = t("job.cvNone"); });
         $("#genCover", el).addEventListener("click", (e) => withLoading(e.currentTarget, async () => {
           try { $("#cover", el).value = (await API.post("/api/student/cover-letter", { job_id: job.id, language: LANG })).text; }
           catch (err) { toast(err.message, "error"); }
         }));
         $("#sendApp", el).addEventListener("click", (e) => withLoading(e.currentTarget, async () => {
           try {
+            const file = $("#cvInput", el).files[0];
+            if (file) {
+              if (file.type !== "application/pdf" || file.size > 2 * 1024 * 1024) return toast(t("job.cvInvalid"), "error");
+              const data = await new Promise((ok, fail) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = fail; r.readAsDataURL(file); });
+              await API.post("/api/student/cv-file", { file_name: file.name, file_base64: data });
+            }
             const sent = await API.post("/api/student/applications", { job_id: job.id, cover_letter: $("#cover", el).value });
-            close();
-            // delivery: "email" = emailed to the company; "source" = the email failed, the student finishes on the original site
-            const vars = { company: job.company.name, source: job.source };
-            toast(t(sent.delivery === "email" ? "job.emailSent" : sent.delivery === "source" ? "job.sourceAdded" : "job.sent", vars), "success");
             Object.assign(job, { applied: true, delivery: sent.delivery, applicants: job.applicants + 1 });
             render();
+            if (sent.delivery === "source" && job.external_url) {
+              // Saved on JobFinder; the company receives applications on the original site: give the student that link
+              $(".modal-body", el).innerHTML = `<div style="text-align:center">${icon("check", 36)}
+                <h3 style="margin:10px 0 8px">${t("job.savedTitle")}</h3>
+                <p class="muted">${t("job.finishOnSource", vars)}</p>
+                <a class="btn btn-primary btn-block btn-lg" style="margin-top:18px" href="${esc(job.external_url)}" target="_blank" rel="noopener nofollow">${t("job.openSource", vars)} ${icon("arrow", 16)}</a></div>`;
+              $(".modal-foot", el).innerHTML = `<button class="btn btn-ghost" data-close>${t("common.close")}</button>`;
+              return;
+            }
+            close();
+            toast(t(sent.delivery === "email" ? "job.emailSent" : "job.sent", vars), "success");
           } catch (err) { toast(err.message, "error"); }
         }));
       },
