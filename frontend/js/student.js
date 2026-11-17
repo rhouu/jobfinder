@@ -74,15 +74,22 @@ const readRepeater = (kind) => $$(`#rep-${kind} .repeater-item`)
   .map((item) => Object.fromEntries($$("[data-k]", item).map((i) => [i.dataset.k, i.value.trim()])))
   .filter((o) => Object.values(o).some(Boolean));
 
-function fillProfileForm(profile, name) {
+/** Fills the profile form. onlyEmpty = true (CV read from "My CV file"): never replaces what is already filled in. */
+function fillProfileForm(profile, name, onlyEmpty = false) {
   const f = $("#profileForm");
+  const put = (field, value) => {
+    if (value === undefined || (onlyEmpty && field.value.trim())) return;
+    if (field.tagName === "SELECT" && value && ![...field.options].some((o) => o.value === value)) field.add(new Option(value, value)); // a city outside the list
+    field.value = value || "";
+  };
   if (name) f.name.value = name;
-  ["headline", "phone", "city", "school", "field", "level", "bio"].forEach((k) => { if (profile[k] !== undefined) f[k].value = profile[k] || ""; });
-  ["linkedin", "github", "website"].forEach((k) => { if (profile.links && profile.links[k] !== undefined) f[k].value = profile.links[k] || ""; });
-  if (profile.skills) skillsTags.set(profile.skills);
-  if (profile.languages) langTags.set(profile.languages);
+  ["headline", "phone", "city", "school", "field", "level", "bio"].forEach((k) => put(f[k], profile[k]));
+  ["linkedin", "github", "website"].forEach((k) => put(f[k], profile.links ? profile.links[k] : undefined));
+  const merge = (tags, list) => tags.set(onlyEmpty ? [...new Set([...tags.get(), ...list])] : list);
+  if (profile.skills) merge(skillsTags, profile.skills);
+  if (profile.languages) merge(langTags, profile.languages);
   if (profile.desired_types) $$("#desiredTypes input").forEach((i) => (i.checked = profile.desired_types.includes(i.value)));
-  Object.keys(REPEATERS).forEach((k) => { if (profile[k]) fillRepeater(k, profile[k]); });
+  Object.keys(REPEATERS).forEach((k) => { if (profile[k] && !(onlyEmpty && readRepeater(k).length)) fillRepeater(k, profile[k]); });
 }
 
 async function loadProfile() {
@@ -131,12 +138,7 @@ async function loadCvFile() {
     const file = e.target.files[0];
     if (!file) return;
     if (file.type !== "application/pdf" || file.size > 2 * 1024 * 1024) return toast(t("spont.cvInvalid"), "error");
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try { await API.post("/api/student/cv-file", { file_name: file.name, file_base64: reader.result }); toast(t("cvf.saved"), "success"); loadCvFile(); }
-      catch (err) { toast(err.message, "error"); }
-    };
-    reader.readAsDataURL(file);
+    uploadCv(file, true); // saves the CV and fills the profile fields that are still empty
   });
   $("#cvDownload")?.addEventListener("click", async () => {
     try {
@@ -151,8 +153,9 @@ async function loadCvFile() {
   });
 }
 
-/** PDF upload: the server reads the CV, we fill the form, the student checks it and clicks Save. */
-function uploadCv(file) {
+/** PDF upload: the server reads the CV (and keeps it as the saved CV), we fill the form, the student checks it and clicks Save.
+    onlyEmpty = true when it comes from the "My CV file" box: fields already filled in are kept. */
+function uploadCv(file, onlyEmpty = false) {
   if (!file) return;
   if (file.type !== "application/pdf" || file.size > 5 * 1024 * 1024) return toast(t("upload.invalid"), "error");
   const reader = new FileReader();
@@ -173,7 +176,7 @@ function uploadCv(file) {
       if (cv_saved) loadCvFile();
       const clean = Object.fromEntries(Object.entries(fields).filter(([, v]) => v && (!Array.isArray(v) || v.length) && (typeof v !== "object" || Object.keys(v).length)));
       if (clean.skills) clean.skills = [...new Set([...skillsTags.get(), ...clean.skills])];
-      fillProfileForm(clean);
+      fillProfileForm(clean, undefined, onlyEmpty);
       toast(t("upload.done"), "success");
     } catch (err) { toast(err.message, "error"); }
     finally {

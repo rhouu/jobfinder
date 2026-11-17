@@ -225,7 +225,7 @@ const T = {
   "code.change": ["Use another email", "Utiliser une autre adresse", "استخدام بريد آخر"],
   "code.invalid": ["Enter the 6 digits from the email.", "Saisissez les 6 chiffres reçus par e-mail.", "أدخل الأرقام الستة من الرسالة."],
   "cvf.title": ["My CV file", "Mon fichier CV", "ملف سيرتي الذاتية"],
-  "cvf.none": ["No CV saved yet. Save one here and it will be attached to your spontaneous applications.", "Aucun CV enregistré. Enregistrez-en un ici : il sera joint à vos candidatures spontanées.", "لا توجد سيرة محفوظة بعد. احفظ واحدة هنا وسترفق بطلباتك التلقائية."],
+  "cvf.none": ["No CV saved yet. Add one here: we fill the empty fields of your profile with it, and it's sent with your applications.", "Aucun CV enregistré. Ajoutez-en un ici : nous remplissons avec lui les champs vides de votre profil, et il est envoyé avec vos candidatures.", "لا توجد سيرة محفوظة بعد. أضف واحدة هنا: نملأ بها الحقول الفارغة في ملفك، وتُرسل مع طلباتك."],
   "cvf.uploadedOn": ["saved {date}", "enregistré le {date}", "حُفظ في {date}"],
   "cvf.view": ["View", "Voir", "عرض"],
   "cvf.upload": ["Upload a PDF", "Importer un PDF", "رفع ملف PDF"],

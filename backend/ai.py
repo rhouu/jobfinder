@@ -16,6 +16,7 @@ import io
 import json
 import logging
 import re
+import unicodedata
 from html import escape
 
 import requests
@@ -218,30 +219,99 @@ def read_cv_pdf(pdf_bytes: bytes, known_skills: list[str]) -> tuple[dict, str]:
     if len(text.strip()) < 40:
         raise ValueError("No text found in this PDF (is it a scanned image?).")
 
+    simple = _simple_cv_read(text, known_skills)
     data = _ask_json("You extract structured data from CVs. Answer with JSON only.",
                      "Extract this CV into JSON with keys: headline, phone, city, school, field, level (one of Bac+1..Bac+5, "
                      "Doctorat or empty), bio (2-3 sentences), skills (list of short strings), languages (list), "
                      "experience (list of {title, org, start, end, description}), education (list of {degree, school, start, end}), "
                      "projects (list of {name, description, tech, link}), links ({linkedin, github, website}). "
                      "Use empty strings/lists when unknown. Do not invent anything.\n\nCV TEXT:\n" + text, timeout=CV_READ_SECONDS)
-    if isinstance(data, dict):
-        return data, "ai"
+    fields = _clean_cv_fields(data)
+    if not fields:
+        return simple, "template"
+    # Gemini sometimes misses the basics: complete them with what the simple reading found
+    for key in ("phone", "city"):
+        fields[key] = fields.get(key) or simple[key]
+    fields["skills"] = list(dict.fromkeys(fields.get("skills", []) + simple["skills"]))[:30]
+    fields["links"] = {**simple["links"], **fields.get("links", {})}
+    return fields, "ai"
 
-    # Simple fallback: find known skills, phone, links and Moroccan cities in the text
+
+CV_CITIES = ["Casablanca", "Rabat", "Marrakech", "Tanger", "Fès", "Agadir", "Meknès", "Oujda", "Kénitra", "Tétouan", "Salé",
+             "El Jadida", "Ouarzazate", "Béni Mellal", "Nador", "Safi", "Mohammedia", "Khouribga", "Settat", "Laâyoune", "Essaouira"]
+CV_LEVELS = ["Bac+1", "Bac+2", "Bac+3", "Bac+4", "Bac+5", "Doctorat"]
+
+
+def _plain(word: str) -> str:
+    """Lower case without accents, to compare city names written in different ways (Fès / Fes)."""
+    return unicodedata.normalize("NFKD", word).encode("ascii", "ignore").decode().lower()
+
+
+def _cv_city(value: str) -> str:
+    """'Marrakech, Maroc' -> 'Marrakech'. Unknown cities are kept as written."""
+    plain = _plain(value)
+    return next((c for c in CV_CITIES if _plain(c) in plain), value.strip()[:60])
+
+
+def _simple_cv_read(text: str, known_skills: list[str]) -> dict:
+    """Reading without AI: phone, Moroccan city, known skills and LinkedIn / GitHub links found in the text."""
     low = text.lower()
     phone = re.search(r"(\+212|0)[\s.-]?[5-7](?:[\s.-]?\d{2}){4}", text)
-    cities = ["Casablanca", "Rabat", "Marrakech", "Tanger", "Fès", "Agadir", "Meknès", "Oujda", "Kénitra", "Tétouan", "Salé", "El Jadida"]
+    city = next((c for c in CV_CITIES if re.search(rf"(?<!\w){re.escape(_plain(c))}(?!\w)", _plain(text))), "")
     links = {}
-    for key, pattern in (("linkedin", r"https?://[^\s]*linkedin\.com[^\s]*"), ("github", r"https?://[^\s]*github\.com[^\s]*")):
-        found = re.search(pattern, text)
+    for key, site in (("linkedin", r"linkedin\.com/[^\s,;)]+"), ("github", r"github\.com/[^\s,;)]+")):
+        found = re.search(rf"(?:https?://)?(?:www\.)?{site}", text, re.I)  # CVs often omit "https://"
         if found:
-            links[key] = found.group(0)
-    return {
-        "phone": phone.group(0) if phone else "",
-        "city": next((c for c in cities if c.lower() in low), ""),
-        "skills": [s for s in known_skills if re.search(rf"(?<!\w){re.escape(s.lower())}(?!\w)", low)][:25],
-        "links": links,
-    }, "template"
+            links[key] = found.group(0) if found.group(0).lower().startswith("http") else "https://" + found.group(0)
+    return {"phone": phone.group(0) if phone else "", "city": city, "links": links,
+            "skills": [s for s in known_skills if re.search(rf"(?<!\w){re.escape(s.lower())}(?!\w)", low)][:25]}
+
+
+def _clean_cv_fields(data) -> dict:
+    """Puts Gemini's answer into the exact shape the profile form expects, whatever small variations it uses
+    (whole answer inside one key, skills as one text, entries as plain strings...). Returns {} if unusable."""
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        data = data[0]
+    if not isinstance(data, dict):
+        return {}
+    expected = {"headline", "phone", "city", "school", "field", "level", "bio", "skills", "languages", "experience", "education", "projects", "links"}
+    if not expected & set(data) and len(data) == 1 and isinstance(next(iter(data.values())), dict):
+        data = next(iter(data.values()))  # e.g. {"cv": {...}}
+    data = {str(k).strip().lower(): v for k, v in data.items()}
+
+    def text(v) -> str:
+        if isinstance(v, list):
+            v = ", ".join(text(x) for x in v if x)
+        elif isinstance(v, dict):
+            v = ", ".join(text(x) for x in v.values() if x)
+        return "" if v is None else str(v).strip()
+
+    def words(v) -> list[str]:
+        items = re.split(r"[,;|\n•]+", v) if isinstance(v, str) else v if isinstance(v, list) else []
+        out = [text(x.get("name") or x.get("skill") or x.get("label") or x.get("language") or next(iter(x.values()), "")) if isinstance(x, dict) else text(x)
+               for x in items]
+        return [w[:60] for w in out if w][:30]
+
+    def entries(v, main: str, keys: tuple) -> list[dict]:
+        rows = v if isinstance(v, list) else [v] if v else []
+        return [{k: text(r.get(k, "")) for k in keys} if isinstance(r, dict) else {**{k: "" for k in keys}, main: text(r)}
+                for r in rows if r][:15]
+
+    fields = {k: text(data.get(k, ""))[:300] for k in ("headline", "phone", "school", "field")}
+    fields["bio"] = text(data.get("bio", ""))[:1500]
+    fields["city"] = _cv_city(text(data.get("city", ""))) if data.get("city") else ""
+    level = text(data.get("level", "")).replace(" ", "").lower()
+    fields["level"] = next((lv for lv in CV_LEVELS if lv.lower() == level), "")
+    fields["skills"], fields["languages"] = words(data.get("skills")), words(data.get("languages"))
+    fields["experience"] = entries(data.get("experience"), "title", ("title", "org", "start", "end", "description"))
+    fields["education"] = entries(data.get("education"), "degree", ("degree", "school", "start", "end"))
+    fields["projects"] = entries(data.get("projects"), "name", ("name", "description", "tech", "link"))
+    links = data.get("links") or {}
+    if isinstance(links, list):  # a list of URLs: sort them by site
+        links = {("linkedin" if "linkedin" in u.lower() else "github" if "github" in u.lower() else "website"): u
+                 for u in (text(x) for x in links) if u}
+    fields["links"] = {k: text(links.get(k, "")) for k in ("linkedin", "github", "website") if isinstance(links, dict) and links.get(k)}
+    return fields if any(fields.values()) else {}
 
 
 # ================================================================ Mock interview
