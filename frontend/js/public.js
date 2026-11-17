@@ -412,6 +412,26 @@ function jobPage() {
       <div class="external-apply"><p class="muted small">${t(byEmail ? "job.emailInfo" : "job.sourceInfo", vars)}</p>${hint}</div>`;
   }
 
+  /** Phones and tablets: the apply box sits at the very bottom of the page, so a bar fixed at the bottom
+      of the screen repeats its main button (CSS shows it only when the page is one column). */
+  function drawApplyBar() {
+    $(".apply-bar")?.remove();
+    document.body.classList.remove("has-apply-bar");
+    const main = $("#applyBtn, #applySourceBtn");
+    const signIn = !user ? $(".sticky-side a.btn-primary") : null;
+    let html = "";
+    if (main) html = `<button class="btn btn-primary btn-block" id="barApply">${main.innerHTML}</button>`;
+    else if (signIn) html = `<a class="btn btn-primary btn-block" href="${esc(signIn.getAttribute("href"))}">${signIn.innerHTML}</a>`;
+    else if (job.applied && user?.role === "student") html = `<a class="btn btn-ghost btn-block" href="/dashboard.html#applications">${icon("check", 16)} ${t("job.track")}</a>`;
+    if (!html) return;
+    const bar = document.createElement("div");
+    bar.className = "apply-bar";
+    bar.innerHTML = html;
+    document.body.appendChild(bar);
+    document.body.classList.add("has-apply-bar");
+    $("#barApply")?.addEventListener("click", () => main.click());
+  }
+
   async function applyOnSource() {
     window.open(job.external_url, "_blank", "noopener"); // opened right away (inside the click) so browsers don't block it
     try {
@@ -502,6 +522,7 @@ function jobPage() {
     bindJobCards($("#jobRoot"));
     $("#applyBtn")?.addEventListener("click", openApply);
     $("#applySourceBtn")?.addEventListener("click", applyOnSource);
+    drawApplyBar();
     $("#copyLink").addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(`${location.origin}/job.html?id=${job.id}`); toast(t("job.linkCopied"), "success"); }
       catch (_) { prompt(t("job.copyLink"), `${location.origin}/job.html?id=${job.id}`); }

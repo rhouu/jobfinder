@@ -578,6 +578,16 @@ a.todo-item:hover { background: var(--primary-soft); }
 .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
 .empty .icon { margin: 0 auto 10px; display: block; color: var(--faint); }
 .toasts { position: fixed; bottom: 22px; inset-inline-start: 22px; z-index: 200; display: grid; gap: 8px; }
+/* Offer page on phones / tablets: "Apply" bar fixed at the bottom of the screen (public.js drawApplyBar) */
+.apply-bar { display: none; }
+@media (max-width: 1100px) {
+  .apply-bar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 85; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -6px 20px rgba(16, 24, 40, 0.08); }
+  body.has-apply-bar { padding-bottom: 76px; }
+  body.has-apply-bar .chat-fab { bottom: 88px; }
+  body.has-apply-bar .chat-panel { bottom: 154px; }
+  body.has-apply-bar .toasts { bottom: 88px; }
+}
 .toast { display: flex; align-items: center; gap: 10px; min-width: 260px; max-width: 380px; padding: 12px 14px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); font-size: 0.92rem; animation: pageIn 0.25s ease-out; }
 .toast.out { opacity: 0; transition: opacity 0.3s; }
 .toast .t-icon { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; flex-shrink: 0; }
