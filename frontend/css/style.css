@@ -445,6 +445,9 @@ html.gsap-on .card-hover:hover { transform: none; }
 .drop-zone { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: var(--radius); border: 2px dashed var(--border); background: var(--surface); cursor: pointer; margin-bottom: 18px; }
 .drop-zone:hover, .drop-zone.over { border-color: var(--primary); background: var(--primary-soft); }
 .drop-zone input { display: none; }
+/* While the CV is being read: clearly busy (not greyed out), and can't be clicked twice */
+.drop-zone.reading { pointer-events: none; border-style: solid; border-color: var(--primary); background: var(--primary-soft); }
+.drop-zone.reading strong { display: flex; align-items: center; gap: 8px; color: var(--primary); }
 .question-card { padding: 18px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); margin-bottom: 12px; }
 .q-num { font-size: 0.75rem; font-weight: 700; color: var(--primary); text-transform: uppercase; }
 .question-card h4 { margin: 6px 0 10px; font-size: 1rem; }

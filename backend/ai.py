@@ -34,8 +34,9 @@ def ai_available() -> bool:
     return bool(GEMINI_API_KEY)
 
 
-def ask_gemini(system: str, messages: list[dict], as_json: bool = False) -> str | None:
-    """messages = [{"role": "user"|"model", "text": "..."}]. Returns the text answer, or None on failure."""
+def ask_gemini(system: str, messages: list[dict], as_json: bool = False, timeout: int = 90) -> str | None:
+    """messages = [{"role": "user"|"model", "text": "..."}]. Returns the text answer, or None on failure
+    (also when Gemini takes longer than `timeout` seconds: the caller then uses its fallback)."""
     if not ai_available():
         return None
     body = {
@@ -46,7 +47,7 @@ def ask_gemini(system: str, messages: list[dict], as_json: bool = False) -> str 
         body["generationConfig"] = {"responseMimeType": "application/json"}
     try:
         r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                          headers={"x-goog-api-key": GEMINI_API_KEY}, json=body, timeout=90)
+                          headers={"x-goog-api-key": GEMINI_API_KEY}, json=body, timeout=timeout)
         r.raise_for_status()
         parts = r.json()["candidates"][0]["content"]["parts"]
     except (requests.RequestException, KeyError, IndexError, ValueError) as exc:
@@ -56,8 +57,8 @@ def ask_gemini(system: str, messages: list[dict], as_json: bool = False) -> str 
     return re.sub(r"^```(?:html|json)?\s*|\s*```$", "", text) or None
 
 
-def _ask_json(system: str, prompt: str):
-    text = ask_gemini(system, [{"role": "user", "text": prompt}], as_json=True)
+def _ask_json(system: str, prompt: str, timeout: int = 90):
+    text = ask_gemini(system, [{"role": "user", "text": prompt}], as_json=True, timeout=timeout)
     try:
         return json.loads(text) if text else None
     except json.JSONDecodeError:
@@ -205,6 +206,9 @@ def generate_cover_letter(user: User, p: StudentProfile, job: Job, language: str
 
 
 # ================================================================ CV upload (PDF -> profile)
+CV_READ_SECONDS = 40  # the student is waiting on the profile page: past this, use the simple reading below
+
+
 def read_cv_pdf(pdf_bytes: bytes, known_skills: list[str]) -> tuple[dict, str]:
     from pypdf import PdfReader  # imported here: only needed for this feature
     try:
@@ -219,7 +223,7 @@ def read_cv_pdf(pdf_bytes: bytes, known_skills: list[str]) -> tuple[dict, str]:
                      "Doctorat or empty), bio (2-3 sentences), skills (list of short strings), languages (list), "
                      "experience (list of {title, org, start, end, description}), education (list of {degree, school, start, end}), "
                      "projects (list of {name, description, tech, link}), links ({linkedin, github, website}). "
-                     "Use empty strings/lists when unknown. Do not invent anything.\n\nCV TEXT:\n" + text)
+                     "Use empty strings/lists when unknown. Do not invent anything.\n\nCV TEXT:\n" + text, timeout=CV_READ_SECONDS)
     if isinstance(data, dict):
         return data, "ai"
 

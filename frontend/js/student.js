@@ -157,8 +157,17 @@ function uploadCv(file) {
   if (file.type !== "application/pdf" || file.size > 5 * 1024 * 1024) return toast(t("upload.invalid"), "error");
   const reader = new FileReader();
   reader.onload = async () => {
-    const zone = $("#dropZone");
-    zone.classList.add("generating");
+    // The AI reading takes ~10-20 s: show it's working, with a seconds counter
+    const zone = $("#dropZone"), title = $("strong", zone), sub = $(".muted", zone);
+    const before = [title.textContent, sub.textContent], started = Date.now();
+    const tick = () => {
+      const s = Math.round((Date.now() - started) / 1000);
+      title.innerHTML = `<span class="spinner"></span> ${esc(t("upload.reading"))}`;
+      sub.textContent = t(s < 25 ? "upload.readingSub" : "upload.readingLong", { s });
+    };
+    zone.classList.add("reading");
+    tick();
+    const timer = setInterval(tick, 1000);
     try {
       const { fields, cv_saved } = await API.post("/api/student/cv-upload", { file_base64: reader.result, file_name: file.name });
       if (cv_saved) loadCvFile();
@@ -167,7 +176,12 @@ function uploadCv(file) {
       fillProfileForm(clean);
       toast(t("upload.done"), "success");
     } catch (err) { toast(err.message, "error"); }
-    finally { zone.classList.remove("generating"); $("#cvFile").value = ""; }
+    finally {
+      clearInterval(timer);
+      zone.classList.remove("reading");
+      [title.textContent, sub.textContent] = before;
+      $("#cvFile").value = "";
+    }
   };
   reader.readAsDataURL(file);
 }
