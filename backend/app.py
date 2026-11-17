@@ -32,7 +32,8 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from . import ai
-from .database import (CONTACT_EMAIL, FRONTEND_DIR, GOOGLE_CLIENT_ID, JOOBLE_API_KEY, OFFER_MAX_DAYS, SITE_URL, Application, Base, Company, DirectoryCompany, EmailCode,
+from .database import (CONTACT_EMAIL, FRONTEND_DIR, GOOGLE_CLIENT_ID, JOOBLE_API_KEY, OFFER_MAX_DAYS, SITE_URL, Application,
+                       ApplicationDelivery, Base, Company, DirectoryCompany, EmailCode,
                        CompanyContact, DeadlineReminder, Job, JobViewDay, Message, Notification, Review, SessionLocal, Setting,
                        SpontaneousApplication, StudentCV, SavedJob, SavedSearch, StudentProfile, User, engine, get_db, iso, utcnow)
 from .helpers import (check_signature, current_user, guess_sector, hash_password, login_response, mail_enabled, make_token,
@@ -451,6 +452,14 @@ def list_jobs(q: str = "", city: str = "", type: str = "", mode: str = "", level
     return {"items": items, "total": total, "page": page, "pages": max(1, -(-total // per_page))}
 
 
+def _my_delivery(job: Job, user: User | None, applied: set, db: Session) -> str:
+    """How the signed-in student's application to this offer was sent ("email", "source" or "")."""
+    if not user or job.id not in applied:
+        return ""
+    a = db.scalar(select(Application).where(Application.job_id == job.id, Application.student_id == user.id))
+    return a.delivery.channel if a and a.delivery else ""
+
+
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: int, user: User | None = Depends(optional_user), db: Session = Depends(get_db)):
     job = db.get(Job, job_id)
@@ -469,7 +478,11 @@ def get_job(job_id: int, user: User | None = Depends(optional_user), db: Session
     applied, saved = _student_marks(user, db)
     similar = db.scalars(select(Job).where(Job.status == "open", Job.id != job.id, or_(Job.type == job.type, Job.city == job.city))
                          .order_by(Job.created_at.desc()).limit(3))
+    # Job-board offer whose company we can email: the application + CV go straight to its inbox
+    by_email = bool(_reachable_directory(job.company, db)) and mail_enabled()
+    missing = [k for k, ok in (("cv", user.cv_file), ("verify", user.email_verified)) if not ok] if by_email and user and user.role == "student" else []
     return {**job.to_dict(), "applied": job.id in applied, "saved": job.id in saved,
+            "apply_by_email": by_email, "email_missing": missing, "delivery": _my_delivery(job, user, applied, db),
             "match": match_job(user.profile, job) if user and user.role == "student" else None,
             "reviews": [r.to_dict() for r in sorted(job.company.reviews, key=lambda r: r.created_at, reverse=True)[:5]],
             "similar": [s.to_dict() for s in similar]}
@@ -529,6 +542,26 @@ class SpontaneousIn(BaseModel):
 SPONTANEOUS_PER_DAY = 5  # limits abuse: a student can't use the site to spam companies
 
 
+def _email_application(company: DirectoryCompany, user: User, subject: str, message: str, pdf: bytes, file_name: str) -> bool:
+    """Emails a student's message + CV to a directory company. Answers go straight to the student (Reply-To),
+    and every email ends with a link the company can use to stop receiving applications."""
+    optout = f"{SITE_URL}/api/directory/{company.id}/optout?sig={sign(f'optout:{company.id}')}"
+    body = (f"{message.strip()}\n\n{user.name}\n{user.email}\n\n"
+            f"----\n"
+            f"Candidature envoyée via JobFinder.ma par {user.name}. Répondez à cet e-mail pour contacter directement le candidat. CV en pièce jointe.\n"
+            f"Application sent through JobFinder.ma by {user.name}. Reply to this email to contact the candidate directly. CV attached.\n"
+            f"Ne plus recevoir de candidatures via JobFinder.ma / Stop receiving applications: {optout}")
+    return send_mail(company.contact.email, subject, body, reply_to=user.email, attachment=(file_name, pdf))
+
+
+def _reachable_directory(company: Company, db: Session) -> DirectoryCompany | None:
+    """For a company that only exists through a job board: its directory entry (same name) if we can email it."""
+    if not company.is_external:
+        return None
+    match = db.scalar(select(DirectoryCompany).where(func.lower(DirectoryCompany.name) == company.name.strip().lower()))
+    return match if match and match.can_apply else None
+
+
 @app.post("/api/directory/{company_id}/apply")
 def spontaneous_apply(company_id: int, data: SpontaneousIn, user: User = Depends(student_only), db: Session = Depends(get_db)):
     """Emails the student's message + CV to a directory company. Answers go straight to the student (Reply-To)."""
@@ -553,14 +586,7 @@ def spontaneous_apply(company_id: int, data: SpontaneousIn, user: User = Depends
     else:
         raise HTTPException(400, "Attach your CV as a PDF file under 2 MB.")
 
-    optout = f"{SITE_URL}/api/directory/{company.id}/optout?sig={sign(f'optout:{company.id}')}"
-    body = (f"{data.message.strip()}\n\n{user.name}\n{user.email}\n\n"
-            f"----\n"
-            f"Candidature envoyée via JobFinder.ma par {user.name}. Répondez à cet e-mail pour contacter directement le candidat. CV en pièce jointe.\n"
-            f"Application sent through JobFinder.ma by {user.name}. Reply to this email to contact the candidate directly. CV attached.\n"
-            f"Ne plus recevoir de candidatures via JobFinder.ma / Stop receiving applications: {optout}")
-    if not send_mail(company.contact.email, f"Candidature spontanée – {user.name}", body, reply_to=user.email,
-                     attachment=(file_name, pdf)):
+    if not _email_application(company, user, f"Candidature spontanée – {user.name}", data.message, pdf, file_name):
         raise HTTPException(502, "The email couldn't be sent. Please try again in a few minutes.")
     row = SpontaneousApplication(student_id=user.id, directory_id=company.id, message=data.message.strip())
     db.add(row)
@@ -907,10 +933,22 @@ def apply(data: ApplyIn, user: User = Depends(student_only), db: Session = Depen
     a = Application(job_id=job.id, student_id=user.id, cover_letter=data.cover_letter.strip(),
                     match_score=match_job(_profile(user, db), job)["score"])
     db.add(a)
-    if job.company.owner:  # companies from job boards have no account yet: the application waits for them
+    if job.company.owner:
         notify(db, job.company.owner, "new_application", {"name": user.name, "job": job.title}, "/company.html#applicants")
+    elif job.company.is_external:
+        # Company not on JobFinder: email it the application + CV when we know its address,
+        # otherwise the student applies on the original site (the page opens it) and we keep track here.
+        directory = _reachable_directory(job.company, db)
+        emailed = False
+        if directory and mail_enabled() and user.email_verified and user.cv_file:
+            source = f" ({job.source})" if job.source else ""
+            message = (f"Candidature pour l'offre « {job.title} »{source}.\n\n"
+                       + (data.cover_letter.strip() or "Bonjour,\n\nJe souhaite postuler à votre offre. Vous trouverez mon CV en pièce jointe.\n\nCordialement,"))
+            emailed = _email_application(directory, user, f"Candidature – {job.title} – {user.name}", message,
+                                         user.cv_file.data, user.cv_file.file_name)
+        a.delivery = ApplicationDelivery(channel="email" if emailed else "source")
     db.commit()
-    return a.to_dict()
+    return {**a.to_dict(), "external_url": job.external_url if a.delivery and a.delivery.channel == "source" else ""}
 
 
 @app.get("/api/student/applications")

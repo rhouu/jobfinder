@@ -267,6 +267,7 @@ class Application(Base):
     student: Mapped[User] = relationship(back_populates="applications")
     messages: Mapped[list["Message"]] = relationship(back_populates="application", cascade="all, delete-orphan",
                                                      order_by="Message.created_at")
+    delivery: Mapped["ApplicationDelivery | None"] = relationship(uselist=False, cascade="all, delete-orphan")
 
     def interview(self) -> dict | None:
         if not self.interview_at:
@@ -277,7 +278,20 @@ class Application(Base):
     def to_dict(self) -> dict:
         return {"id": self.id, "job_id": self.job_id, "student_id": self.student_id, "status": self.status,
                 "cover_letter": self.cover_letter, "match_score": self.match_score, "interview": self.interview(),
+                "delivery": self.delivery.channel if self.delivery else "",
                 "created_at": iso(self.created_at), "updated_at": iso(self.updated_at)}
+
+
+class ApplicationDelivery(Base):
+    """How an application to a job-board offer (company not on JobFinder) reached the employer.
+    channel = "email"  : sent by email with the CV to the company's address from the directory
+              "source" : the student applies on the original site (Jooble, Remotive...); JobFinder keeps track of it
+    Applications to companies with an account have no row here: they arrive in the company dashboard."""
+    __tablename__ = "application_deliveries"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), unique=True)
+    channel: Mapped[str] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class SavedJob(Base):

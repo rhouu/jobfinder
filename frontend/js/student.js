@@ -198,6 +198,7 @@ async function loadApplications() {
           <div class="row" style="margin-bottom:8px">${companyLogo(a.job.company, "sm")}<div class="s grow">${esc(a.job.company.name)}</div></div>
           <div class="t">${esc(a.job.title)}</div><div class="s">${typeBadge(a.job.type)} · ${timeAgo(a.created_at)}</div>
           ${a.interview ? `<div class="s" style="margin-top:6px;color:#a78bfa">${icon("calendar", 13)} ${dateTimeStr(a.interview.at)}</div>` : ""}
+          ${a.delivery ? `<div class="s" style="margin-top:6px">${icon(a.delivery === "email" ? "mail" : "arrow", 13)} ${t(a.delivery === "email" ? "apps.viaEmail" : "apps.viaSource", { source: a.job.source })}</div>` : ""}
           ${a.can_review ? `<div class="s" style="margin-top:6px;color:var(--accent)">${icon("star", 13)} ${t("reviews.write")}</div>` : ""}
         </div>`).join("") || `<div class="muted small" style="text-align:center;padding:20px 0">${t("apps.emptyCol")}</div>`}</div>`;
     }).join("");
@@ -212,7 +213,8 @@ function openApplication(a) {
     title: a.job.title,
     body: `
       <div class="row" style="margin-bottom:18px">${companyLogo(a.job.company)}<div class="grow"><strong>${esc(a.job.company.name)}</strong><div class="muted small">${esc(a.job.city)} · ${t("apps.appliedOn", { date: dateStr(a.created_at) })}</div></div>${statusBadge(a.status)}</div>
-      ${a.job.company.external ? `<p class="notice small" style="margin-bottom:16px">${icon("clock", 15)} ${t("apps.waitingCompany", { company: a.job.company.name })}</p>` : ""}
+      ${a.job.company.external ? `<p class="notice small" style="margin-bottom:16px">${icon(a.delivery === "email" ? "mail" : a.delivery === "source" ? "arrow" : "clock", 15)}
+        ${t(a.delivery === "email" ? "apps.deliveredEmail" : a.delivery === "source" ? "apps.deliveredSource" : "apps.waitingCompany", { company: a.job.company.name, source: a.job.source })}</p>` : ""}
       <div class="row" style="gap:6px;margin-bottom:20px;flex-wrap:nowrap">${steps.map((s, i) => `<div class="grow"><div class="progress" style="height:6px"><i style="width:${i <= reached ? 100 : 0}%"></i></div><small class="muted">${t("status." + s)}</small></div>`).join("")}</div>
       ${a.interview ? interviewCard({ ...a.interview, application_id: a.id }, t("iv.title")) : ""}
       <div class="row" style="margin:16px 0">${ring(Math.round(a.match_score))}<span class="muted">${t("apps.matchWhen")}</span></div>
@@ -220,6 +222,7 @@ function openApplication(a) {
     footer: `${["accepted", "rejected"].includes(a.status) ? "" : `<button class="btn btn-danger" id="withdraw">${t("apps.withdraw")}</button>`}
       ${a.can_review ? `<button class="btn btn-gold" id="reviewBtn">${icon("star", 15)} ${t("reviews.write")}</button>` : ""}
       ${a.job.company.external ? "" : `<a class="btn btn-ghost" href="#messages/${a.id}" data-close>${icon("chat", 15)} ${t("apps.message")}</a>`}
+      ${a.delivery === "source" && a.job.external_url ? `<a class="btn btn-ghost" href="${esc(a.job.external_url)}" target="_blank" rel="noopener nofollow">${t("job.openSource", { source: a.job.source })}</a>` : ""}
       <a class="btn btn-ghost" href="/job.html?id=${a.job.id}">${t("apps.viewOffer")}</a>`,
     onOpen: (el, close) => {
       animateRings(el);
