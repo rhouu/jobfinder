@@ -672,8 +672,8 @@ def _jobs_for_chat(message: str, user: User | None, db: Session) -> list[Job]:
 def chat(data: ChatIn, user: User | None = Depends(optional_user), db: Session = Depends(get_db)):
     jobs = _jobs_for_chat(data.message, user, db)
     reply = ai.chat_reply(data.message, data.history, data.language, user, jobs)
-    if reply is None:  # no Gemini key (or Gemini is down): show matching offers instead
-        return {"reply": None, "offline": True, "jobs": [j.to_dict() for j in jobs[:4]]}
+    if reply is None:  # no Gemini key, Gemini down or too slow: show matching offers instead
+        return {"reply": None, "offline": True, "reason": ai.last_error, "jobs": [j.to_dict() for j in jobs[:4]]}
     ids = {int(x) for x in re.findall(r"\[job:(\d+)\]", reply)}
     return {"reply": reply, "offline": False, "jobs": [j.to_dict() for j in jobs if j.id in ids]}
 

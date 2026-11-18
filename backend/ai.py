@@ -35,26 +35,81 @@ def ai_available() -> bool:
     return bool(GEMINI_API_KEY)
 
 
-def ask_gemini(system: str, messages: list[dict], as_json: bool = False, timeout: int = 90) -> str | None:
-    """messages = [{"role": "user"|"model", "text": "..."}]. Returns the text answer, or None on failure
-    (also when Gemini takes longer than `timeout` seconds: the caller then uses its fallback)."""
-    if not ai_available():
+CHAT_SECONDS = 20       # the chatbot answers live: past this, show the matching offers instead
+CHAT_MAX_TOKENS = 2048  # answers are under 180 words; room left for the model's short thinking
+last_error = ""         # why the latest Gemini call failed ("timeout", "http 429"...), never the key
+
+
+def thinking_config(model: str = GEMINI_MODEL) -> dict | None:
+    """Short thinking, for quick answers. Gemini 3 and later take a thinking level (MINIMAL is not accepted by
+    every model, LOW is); Gemini 2.5 takes a token budget (0 turns it off on Flash, Pro needs at least 128)."""
+    found = re.match(r"gemini-(\d+)(?:\.(\d+))?", model or "")
+    if not found:
         return None
+    major, minor = int(found.group(1)), int(found.group(2) or 0)
+    if major >= 3:
+        return {"thinkingLevel": "LOW"}
+    if (major, minor) == (2, 5):
+        return {"thinkingBudget": 128 if "pro" in model else 0}
+    return None
+
+
+def build_body(system: str, messages: list[dict], as_json: bool = False, fast: bool = False, max_tokens: int | None = None,
+               thinking: bool = True) -> dict:
+    """The generateContent request. `fast` (the chatbot) limits thinking so the answer comes in seconds."""
     body = {
         "system_instruction": {"parts": [{"text": system}]},
         "contents": [{"role": m["role"], "parts": [{"text": m["text"]}]} for m in messages],
     }
+    config = {}
     if as_json:
-        body["generationConfig"] = {"responseMimeType": "application/json"}
+        config["responseMimeType"] = "application/json"
+    if max_tokens:
+        config["maxOutputTokens"] = max_tokens
+    if fast and thinking and thinking_config():
+        config["thinkingConfig"] = thinking_config()
+    if config:
+        body["generationConfig"] = config
+    return body
+
+
+def ask_gemini(system: str, messages: list[dict], as_json: bool = False, timeout: int = 90, fast: bool = False,
+               max_tokens: int | None = None) -> str | None:
+    """messages = [{"role": "user"|"model", "text": "..."}]. Returns the text answer, or None on failure
+    (also when Gemini takes longer than `timeout` seconds: the caller then uses its fallback)."""
+    global last_error
+    if not ai_available():
+        last_error = "no key"
+        return None
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    body = build_body(system, messages, as_json, fast, max_tokens)
     try:
-        r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                          headers={"x-goog-api-key": GEMINI_API_KEY}, json=body, timeout=timeout)
+        r = requests.post(url, headers={"x-goog-api-key": GEMINI_API_KEY}, json=body, timeout=timeout)
+        if r.status_code == 400 and "thinkingConfig" in body.get("generationConfig", {}):
+            # this model refuses the thinking setting: ask again without it
+            log.warning("Gemini refused the thinking setting for %s, retrying without it", GEMINI_MODEL)
+            body = build_body(system, messages, as_json, fast, max_tokens, thinking=False)
+            r = requests.post(url, headers={"x-goog-api-key": GEMINI_API_KEY}, json=body, timeout=timeout)
         r.raise_for_status()
         parts = r.json()["candidates"][0]["content"]["parts"]
-    except (requests.RequestException, KeyError, IndexError, ValueError) as exc:
-        log.warning("Gemini request failed, using fallback: %s", exc)
+    except requests.Timeout:
+        last_error = "timeout"
+        log.warning("Gemini took more than %s s, using fallback", timeout)
         return None
-    text = "".join(p.get("text", "") for p in parts).strip()
+    except requests.HTTPError as exc:
+        last_error = f"http {exc.response.status_code}"
+        try:  # Google's own error message (it never contains the key, which is sent in a header)
+            detail = exc.response.json().get("error", {}).get("message", "")[:200]
+        except ValueError:
+            detail = ""
+        log.warning("Gemini request failed (%s %s), using fallback", last_error, detail)
+        return None
+    except (requests.RequestException, KeyError, IndexError, ValueError) as exc:
+        last_error = type(exc).__name__
+        log.warning("Gemini request failed (%s), using fallback", last_error)
+        return None
+    text = "".join(p.get("text", "") for p in parts if not p.get("thought")).strip()
+    last_error = "" if text else "empty answer"
     return re.sub(r"^```(?:html|json)?\s*|\s*```$", "", text) or None
 
 
@@ -99,7 +154,8 @@ def chat_reply(message: str, history: list[dict], language: str, user: User | No
     elif user:
         context += f"\n\nThe user is signed in as a {user.role}."
     turns = [m for m in history[-10:] if m.get("role") in ("user", "model") and m.get("text")]
-    return ask_gemini(system + "\n\n" + context, turns + [{"role": "user", "text": message}])
+    return ask_gemini(system + "\n\n" + context, turns + [{"role": "user", "text": message}],
+                      timeout=CHAT_SECONDS, fast=True, max_tokens=CHAT_MAX_TOKENS)
 
 
 # ================================================================ CV
