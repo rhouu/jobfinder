@@ -472,7 +472,7 @@ function renderNav(active = "") {
         </div>
       </div>
       <div class="menu-wrap">
-        <button class="user-chip" id="userBtn">${avatar(u)}<span class="name">${esc(u.name)}</span></button>
+        <button class="user-chip" id="userBtn" title="${esc(u.name)}">${avatar(u)}<span class="name">${t("nav.mySpace")}</span></button>
         <div class="dropdown" id="userMenu">
           <a href="${Auth.home(u.role)}">${icon("grid", 16)} ${t("nav.dashboard")}</a>
           ${u.role === "student" ? `<a href="/dashboard.html#applications">${icon("briefcase", 16)} ${t("nav.applications")}</a><a href="/dashboard.html#messages">${icon("chat", 16)} ${t("nav.messages")}</a>` : ""}

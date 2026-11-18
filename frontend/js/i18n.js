@@ -69,6 +69,7 @@ const T = {
   "nav.signin": ["Sign in", "Connexion", "تسجيل الدخول"],
   "nav.start": ["Get started", "Commencer", "ابدأ الآن"],
   "nav.dashboard": ["Dashboard", "Tableau de bord", "لوحة التحكم"],
+  "nav.mySpace": ["My space", "Mon espace", "فضائي"],
   "nav.applications": ["Applications", "Candidatures", "الطلبات"],
   "nav.messages": ["Messages", "Messages", "الرسائل"],
   "nav.offers": ["My offers", "Mes offres", "عروضي"],
