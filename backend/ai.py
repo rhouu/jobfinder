@@ -198,12 +198,37 @@ def generate_cover_letter(user: User, p: StudentProfile, job: Job, language: str
     text = ask_gemini("You are a career coach. Never invent experience the candidate does not have.", [{"role": "user", "text": prompt}])
     if text:
         return text, "ai"
+    return cover_letter_template(user, p, job, language), "template"
+
+
+def cover_letter_template(user: User, p: StudentProfile, job: Job, language: str) -> str:
+    """The letter used when Gemini is not available, in the language the student chose (English, French or Arabic).
+    Profile fields that are empty are simply left out of the sentence."""
     mine = {s.lower() for s in p.skills or []}
-    skills = ", ".join([s for s in job.skills or [] if s.lower() in mine][:4] or (p.skills or [])[:4]) or "my skills"
-    return (f"Dear {job.company.name} recruitment team,\n\nI am applying for the {job.title} position ({job.type}) in {job.city}. "
-            f"I am a {p.level} student in {p.field} at {p.school}, and this opportunity matches my goals.\n\n"
-            f"Through my studies and projects I developed solid skills in {skills}. I am eager to learn from your team "
-            f"and contribute from day one.\n\nThank you for your time and consideration.\n\nBest regards,\n{user.name}"), "template"
+    skills = ", ".join([s for s in job.skills or [] if s.lower() in mine][:4] or (p.skills or [])[:4])
+    c, title, kind, city = job.company.name, job.title, job.type, job.city
+    if language == "fr":
+        studies = " ".join(x for x in (f"en {p.field}" if p.field else "", f"à {p.school}" if p.school else "") if x)
+        who = f"Étudiant(e) {p.level} {studies}".replace("  ", " ").strip() if (p.level or studies) else ""
+        return (f"Madame, Monsieur,\n\nJe vous adresse ma candidature pour le poste de {title} ({kind}) à {city}. "
+                + (f"{who}, je" if who else "Je") + " vois dans cette offre une vraie occasion de progresser.\n\n"
+                f"Au fil de mes études et de mes projets, j'ai développé des compétences en {skills or 'travail d’équipe et en apprentissage rapide'}. "
+                f"Je serais heureux(se) d'apprendre aux côtés de votre équipe et de contribuer dès le premier jour.\n\n"
+                f"Je vous remercie pour l'attention portée à ma candidature.\n\nCordialement,\n{user.name}")
+    if language == "ar":
+        studies = " ".join(x for x in (f"في تخصص {p.field}" if p.field else "", f"بـ{p.school}" if p.school else "") if x)
+        who = f"بصفتي طالبًا ({p.level}) {studies}".strip() if (p.level or studies) else ""
+        return (f"السادة فريق التوظيف في {c}،\n\nأتقدم بطلبي لشغل منصب {title} ({kind}) في {city}. "
+                + (f"{who}، أرى" if who else "أرى") + " في هذه الفرصة خطوة مهمة في مساري.\n\n"
+                f"خلال دراستي ومشاريعي اكتسبت مهارات في {skills or 'العمل الجماعي وسرعة التعلم'}، "
+                f"وأتطلع إلى التعلم مع فريقكم والمساهمة منذ اليوم الأول.\n\nشكرًا لوقتكم واهتمامكم.\n\nمع خالص التحية،\n{user.name}")
+    studies = " ".join(x for x in (f"in {p.field}" if p.field else "", f"at {p.school}" if p.school else "") if x)
+    who = f"I am a {p.level} student {studies}".replace("  ", " ").strip() if (p.level or studies) else ""
+    return (f"Dear {c} recruitment team,\n\nI am applying for the {title} position ({kind}) in {city}. "
+            + (f"{who}, and this" if who else "This") + " opportunity matches my goals.\n\n"
+            f"Through my studies and projects I developed solid skills in {skills or 'teamwork and learning fast'}. "
+            f"I am eager to learn from your team and contribute from day one.\n\n"
+            f"Thank you for your time and consideration.\n\nBest regards,\n{user.name}")
 
 
 # ================================================================ CV upload (PDF -> profile)
