@@ -49,13 +49,15 @@ Spontaneous applications are the exception: they need real SMTP. With Gmail: tur
 ## Put it online (Render)
 
 1. Push this folder to a GitHub repository.
-2. On [render.com](https://render.com): **New > Blueprint**, pick the repository. `render.yaml` creates the website and a PostgreSQL database.
-3. Fill in the values Render asks for: `ADMIN_EMAIL`, `ADMIN_PASSWORD` (10+ characters), `SITE_URL` (your `https://….onrender.com` address).
+2. Create a free PostgreSQL database on [neon.tech](https://neon.tech) (region: Europe) and copy its connection string.
+3. On [render.com](https://render.com): **New > Blueprint**, pick the repository (`render.yaml` describes the website), then fill in
+   the values Render asks for: `DATABASE_URL` (the Neon connection string), `ADMIN_EMAIL`, `ADMIN_PASSWORD` (10+ characters),
+   `SITE_URL` (your `https://….onrender.com` address).
    The AI, Google sign-in and email keys are optional and can be added later in the service's **Environment** tab.
 4. The first start creates the tables, the admin account and imports the offers and the company directory.
 
 In production (`RENDER` or `PRODUCTION` set) the site refuses to start with the default `SECRET_KEY` or admin password.
-Free Render services sleep after 15 minutes without visitors (the first visit then takes ~1 minute), and the free database expires after 30 days.
+Free Render services sleep after 15 minutes without visitors (the first visit then takes ~1 minute).
 
 ## Fresh offers, Google and backups
 
@@ -134,12 +136,18 @@ without it, accounts are signed in right away as before.
 ## How the code is organised
 
 ```
-backend/                 5 Python files
-  app.py        every API route, grouped in numbered sections (accounts, jobs, chat, messages, students, companies, admin)
-  database.py   settings from .env + all database tables
-  helpers.py    passwords & login tokens, job matching, HTML cleaning, emails, notifications
-  ai.py         everything that talks to Gemini (+ the fallback when there is no key)
-  seed.py       admin account + imports data/offers.csv and data/companies.csv
+backend/
+  app.py                 every API route, grouped in numbered sections (accounts, jobs, chat, messages, students, companies, admin)
+  database.py            settings from .env + all database tables
+  helpers.py             passwords & login tokens, job matching, HTML cleaning, emails, notifications
+  ai.py                  everything that talks to Gemini (+ the fallback when there is no key)
+  seed.py                admin account, imports data/*.csv, daily offers from Jooble and Remotive
+  data_pipeline.py       collects the sources into data/raw, cleans them into data/clean (run by hand)
+  data_exploration.py    the figures of the data analysis, from data/raw and data/clean (run by hand)
+  fetch_osm_directory.py companies of 6 cities from OpenStreetMap into data/companies_osm.csv (run by hand)
+  copy_database.py       copies every table from one database to another, e.g. to Neon (run by hand)
+
+data/                    offers.csv, companies.csv, companies_osm.csv (public) and company_emails.csv (kept private)
 
 frontend/
   index.html jobs.html job.html               public pages      → js/public.js
@@ -150,6 +158,8 @@ frontend/
   js/app.js       shared code: API calls, navbar, notifications, chatbot, messages, small UI helpers
   js/i18n.js      all texts in English, French and Arabic (one line per text)
   css/style.css   the whole design; change --primary at the top to change the main colour
+  css/portfolio.css, js/portfolio.js   the public portfolio page a student can share
+  privacy.html terms.html offline.html, sw.js, manifest.webmanifest, icons/   legal pages and the installable phone app
 ```
 
 ## Animations
