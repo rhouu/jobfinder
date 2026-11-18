@@ -15,7 +15,9 @@ falls back to a simple built-in version, so the website always works.
 import io
 import json
 import logging
+import os
 import re
+import time
 import unicodedata
 from html import escape
 
@@ -36,8 +38,14 @@ def ai_available() -> bool:
 
 
 CHAT_SECONDS = 20       # the chatbot answers live: past this, show the matching offers instead
+CHAT_TRY_SECONDS = 12   # longest wait for one model before trying the next one
 CHAT_MAX_TOKENS = 2048  # answers are under 180 words; room left for the model's short thinking
+# The chatbot uses fast "Flash-Lite" models first (the main model, GEMINI_MODEL, can be slow or overloaded);
+# change the list on the server with GEMINI_CHAT_MODELS=model1,model2
+CHAT_MODELS = [m.strip() for m in os.getenv("GEMINI_CHAT_MODELS", "gemini-3.5-flash-lite,gemini-2.5-flash-lite").split(",") if m.strip()]
 last_error = ""         # why the latest Gemini call failed ("timeout", "http 429"...), never the key
+last_model = ""         # the model that gave the latest answer
+_chat_model_ok = ""     # the chat model that answered last time: tried first
 
 
 def thinking_config(model: str = GEMINI_MODEL) -> dict | None:
@@ -55,7 +63,7 @@ def thinking_config(model: str = GEMINI_MODEL) -> dict | None:
 
 
 def build_body(system: str, messages: list[dict], as_json: bool = False, fast: bool = False, max_tokens: int | None = None,
-               thinking: bool = True) -> dict:
+               thinking: bool = True, model: str = GEMINI_MODEL) -> dict:
     """The generateContent request. `fast` (the chatbot) limits thinking so the answer comes in seconds."""
     body = {
         "system_instruction": {"parts": [{"text": system}]},
@@ -66,35 +74,35 @@ def build_body(system: str, messages: list[dict], as_json: bool = False, fast: b
         config["responseMimeType"] = "application/json"
     if max_tokens:
         config["maxOutputTokens"] = max_tokens
-    if fast and thinking and thinking_config():
-        config["thinkingConfig"] = thinking_config()
+    if fast and thinking and thinking_config(model):
+        config["thinkingConfig"] = thinking_config(model)
     if config:
         body["generationConfig"] = config
     return body
 
 
-def ask_gemini(system: str, messages: list[dict], as_json: bool = False, timeout: int = 90, fast: bool = False,
-               max_tokens: int | None = None) -> str | None:
+def ask_gemini(system: str, messages: list[dict], as_json: bool = False, timeout: float = 90, fast: bool = False,
+               max_tokens: int | None = None, model: str = GEMINI_MODEL) -> str | None:
     """messages = [{"role": "user"|"model", "text": "..."}]. Returns the text answer, or None on failure
     (also when Gemini takes longer than `timeout` seconds: the caller then uses its fallback)."""
-    global last_error
+    global last_error, last_model
     if not ai_available():
         last_error = "no key"
         return None
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-    body = build_body(system, messages, as_json, fast, max_tokens)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    body = build_body(system, messages, as_json, fast, max_tokens, model=model)
     try:
         r = requests.post(url, headers={"x-goog-api-key": GEMINI_API_KEY}, json=body, timeout=timeout)
         if r.status_code == 400 and "thinkingConfig" in body.get("generationConfig", {}):
             # this model refuses the thinking setting: ask again without it
-            log.warning("Gemini refused the thinking setting for %s, retrying without it", GEMINI_MODEL)
-            body = build_body(system, messages, as_json, fast, max_tokens, thinking=False)
+            log.warning("Gemini refused the thinking setting for %s, retrying without it", model)
+            body = build_body(system, messages, as_json, fast, max_tokens, thinking=False, model=model)
             r = requests.post(url, headers={"x-goog-api-key": GEMINI_API_KEY}, json=body, timeout=timeout)
         r.raise_for_status()
         parts = r.json()["candidates"][0]["content"]["parts"]
     except requests.Timeout:
         last_error = "timeout"
-        log.warning("Gemini took more than %s s, using fallback", timeout)
+        log.warning("Gemini %s took more than %.0f s", model, timeout)
         return None
     except requests.HTTPError as exc:
         last_error = f"http {exc.response.status_code}"
@@ -102,15 +110,37 @@ def ask_gemini(system: str, messages: list[dict], as_json: bool = False, timeout
             detail = exc.response.json().get("error", {}).get("message", "")[:200]
         except ValueError:
             detail = ""
-        log.warning("Gemini request failed (%s %s), using fallback", last_error, detail)
+        log.warning("Gemini %s failed (%s %s)", model, last_error, detail)
         return None
     except (requests.RequestException, KeyError, IndexError, ValueError) as exc:
         last_error = type(exc).__name__
-        log.warning("Gemini request failed (%s), using fallback", last_error)
+        log.warning("Gemini %s failed (%s)", model, last_error)
         return None
     text = "".join(p.get("text", "") for p in parts if not p.get("thought")).strip()
-    last_error = "" if text else "empty answer"
+    last_error, last_model = ("", model) if text else ("empty answer", last_model)
     return re.sub(r"^```(?:html|json)?\s*|\s*```$", "", text) or None
+
+
+def ask_gemini_fast(system: str, messages: list[dict]) -> str | None:
+    """For the chatbot: fast models first, each given at most CHAT_TRY_SECONDS, all within CHAT_SECONDS.
+    A model that is missing, overloaded or too slow is skipped; the one that answers is tried first next time."""
+    global _chat_model_ok, last_error
+    deadline = time.monotonic() + CHAT_SECONDS
+    order = list(dict.fromkeys([_chat_model_ok] * bool(_chat_model_ok) + CHAT_MODELS + [GEMINI_MODEL]))
+    errors = []
+    for model in order:
+        left = deadline - time.monotonic()
+        if left < 3:
+            break
+        text = ask_gemini(system, messages, timeout=min(CHAT_TRY_SECONDS, left), fast=True, max_tokens=CHAT_MAX_TOKENS, model=model)
+        if text:
+            _chat_model_ok = model
+            return text
+        errors.append(f"{model}: {last_error}")
+        if last_error == "no key":
+            break
+    last_error = "; ".join(errors) or "timeout"
+    return None
 
 
 def _ask_json(system: str, prompt: str, timeout: int = 90):
@@ -154,8 +184,7 @@ def chat_reply(message: str, history: list[dict], language: str, user: User | No
     elif user:
         context += f"\n\nThe user is signed in as a {user.role}."
     turns = [m for m in history[-10:] if m.get("role") in ("user", "model") and m.get("text")]
-    return ask_gemini(system + "\n\n" + context, turns + [{"role": "user", "text": message}],
-                      timeout=CHAT_SECONDS, fast=True, max_tokens=CHAT_MAX_TOKENS)
+    return ask_gemini_fast(system + "\n\n" + context, turns + [{"role": "user", "text": message}])
 
 
 # ================================================================ CV

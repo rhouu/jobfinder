@@ -675,7 +675,7 @@ def chat(data: ChatIn, user: User | None = Depends(optional_user), db: Session =
     if reply is None:  # no Gemini key, Gemini down or too slow: show matching offers instead
         return {"reply": None, "offline": True, "reason": ai.last_error, "jobs": [j.to_dict() for j in jobs[:4]]}
     ids = {int(x) for x in re.findall(r"\[job:(\d+)\]", reply)}
-    return {"reply": reply, "offline": False, "jobs": [j.to_dict() for j in jobs if j.id in ids]}
+    return {"reply": reply, "offline": False, "model": ai.last_model, "jobs": [j.to_dict() for j in jobs if j.id in ids]}
 
 
 # ============================================================================ 5. NOTIFICATIONS
