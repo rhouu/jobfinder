@@ -682,8 +682,11 @@ a.todo-item:hover { background: var(--primary-soft); }
   .logo .txt { display: none; }
   .hide-sm { display: none; }
   .feature-grid, .cat-grid, .steps, .form-grid { grid-template-columns: 1fr; }
-  .search-bar { flex-direction: column; }
+  /* stacked on phones: a rounded card (the 999px pill radius turns a tall box into a blob) */
+  .search-bar { flex-direction: column; gap: 6px; padding: 10px; border-radius: 20px; }
+  .search-bar .input-icon { flex: none; width: 100%; }
   .search-bar .select { width: 100%; border-inline-start: 0; border-top: 1px solid var(--border); }
+  .search-bar .btn { width: 100%; border-radius: 12px; }
   .job-grid { grid-template-columns: 1fr; }
   .kpis { gap: 10px; }
   .kpi .k-val { font-size: 1.4rem; }
