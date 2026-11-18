@@ -15,19 +15,51 @@ function setCompletion(pct) {
 async function loadOverview() {
   try {
     const o = await API.get("/api/student/overview");
-    animateCount($("#kApps"), o.applications);
-    animateCount($("#kInterviews"), o.by_status.interview);
-    animateCount($("#kAccepted"), o.by_status.accepted);
-    animateCount($("#kSaved"), o.saved);
-    $("#appCount").textContent = o.applications;
-    setCompletion(o.completion);
-    $("#completionBadge").textContent = `${o.completion}%`;
-    requestAnimationFrame(() => ($("#completionBar").style.width = o.completion + "%"));
+    const s = o.by_status, inProgress = s.submitted + s.reviewing + s.interview;
+    const nextIv = o.interviews[0];
+
+    // Welcome banner: one-line summary + profile strength
+    const summary = [];
+    if (inProgress) summary.push(t("dash.sumInProgress", { n: inProgress }));
+    if (o.interviews.length) summary.push(t("dash.sumInterviews", { n: o.interviews.length }));
+    if (o.unread_messages) summary.push(t("dash.sumMessages", { n: o.unread_messages }));
+    $("#heroSummary").textContent = summary.length ? summary.join(" · ") : t(o.applications ? "dash.sumQuiet" : "dash.sumStart");
+    $("#heroRing").innerHTML = ring(o.completion, "lg");
     $("#completionTip").textContent = t(o.completion >= 90 ? "dash.tipGreat" : "dash.tipMore");
-    barChart($("#pipelineChart"), Object.entries(o.by_status).map(([k, v]) => ({ label: t("status." + k), value: v, color: STATUS_COLORS[k] })));
+    setCompletion(o.completion);
+    animateRings($("#heroRing"));
+
+    // Numbers + one helpful line under each
+    animateCount($("#kApps"), o.applications);
+    animateCount($("#kInterviews"), o.interviews.length);
+    animateCount($("#kMessages"), o.unread_messages);
+    animateCount($("#kSaved"), o.saved);
+    $("#kAppsSub").textContent = o.applications ? t("dash.subInProgress", { n: inProgress }) : t("dash.subNoApps");
+    $("#kInterviewsSub").textContent = nextIv ? t("dash.subNext", { date: dateStr(nextIv.at) }) : t("dash.subNoInterview");
+    $("#kMessagesSub").textContent = t(o.unread_messages ? "dash.subUnread" : "dash.subNoUnread");
+    $("#kSavedSub").textContent = o.deadlines.length ? t("dash.subClosing", { n: o.deadlines.length }) : t("dash.subSaved");
+    $("#appCount").textContent = o.applications;
+
+    drawSteps(o);
+    barChart($("#pipelineChart"), Object.entries(s).map(([k, v]) => ({ label: t("status." + k), value: v, color: STATUS_COLORS[k] })));
 
     $("#interviewsCard").hidden = !o.interviews.length;
     $("#interviews").innerHTML = o.interviews.map((iv) => interviewCard(iv, `${iv.job} · ${iv.company}`)).join("");
+
+    $("#recentApps").innerHTML = o.recent.length ? o.recent.map((a) => `
+      <a class="list-row" href="#applications">${companyLogo(a.company)}
+        <div class="grow"><div class="title">${esc(a.job.title)}</div>
+          <div class="sub">${esc(a.company.name)} · ${timeAgo(a.created_at)}${a.delivery ? ` · ${t(a.delivery === "email" ? "apps.viaEmail" : "apps.viaSource", { source: a.job.source })}` : ""}</div></div>
+        ${statusBadge(a.status)}</a>`).join("")
+      : `<div class="empty small">${t("dash.noApps")}<br><a class="btn btn-primary btn-sm" href="/jobs.html" style="margin-top:12px">${t("dash.findOffers")}</a></div>`;
+
+    $("#deadlinesCard").hidden = !o.deadlines.length;
+    $("#deadlines").innerHTML = o.deadlines.map((j) => {
+      const days = Math.max(0, Math.ceil((new Date(j.deadline) - Date.now()) / 86400000));
+      return `<a class="list-row" href="/job.html?id=${j.id}">${companyLogo(j.company, "sm")}
+        <div class="grow"><div class="title">${esc(j.title)}</div><div class="sub">${esc(j.company.name)} · ${dateStr(j.deadline)}</div></div>
+        <span class="badge ${days <= 3 ? "badge-red" : "badge-gold"}">${t(days ? "dash.daysLeft" : "dash.lastDay", { n: days })}</span></a>`;
+    }).join("");
 
     $("#gapsCard").hidden = !o.skill_gaps.length;
     $("#gaps").innerHTML = learnBlock(o.skill_gaps.slice(0, 4));
@@ -38,6 +70,28 @@ async function loadOverview() {
       : `<div class="empty">${t("dash.noMatches")}</div>`;
     animateRings($("#matches"));
   } catch (err) { toast(err.message, "error"); }
+}
+
+/** "My next steps": what still helps the student get hired, ticked automatically when done. */
+function drawSteps(o) {
+  const steps = [
+    { done: o.email_verified, key: "dash.stepVerify", href: "" },
+    { done: o.completion >= 80, key: "dash.stepProfile", href: "#profile" },
+    { done: o.cv_file, key: "dash.stepCvFile", href: "#profile" },
+    { done: o.has_cv, key: "dash.stepAiCv", href: "#cv" },
+    { done: o.applications > 0, key: "dash.stepApply", href: "/jobs.html" },
+    { done: o.alerts > 0, key: "dash.stepAlert", href: "/jobs.html" },
+    { done: o.portfolio_public, key: "dash.stepPortfolio", href: "#portfolio" },
+  ];
+  const done = steps.filter((x) => x.done).length;
+  $("#stepsCount").textContent = `${done}/${steps.length}`;
+  requestAnimationFrame(() => ($("#stepsBar").style.width = `${(100 * done) / steps.length}%`));
+  // Steps still to do first; finished ones stay visible (ticked) below them
+  $("#stepsList").innerHTML = done === steps.length ? `<p class="muted small">${t("dash.stepsDone")}</p>`
+    : [...steps.filter((x) => !x.done), ...steps.filter((x) => x.done)].map((x) => {
+      const inner = `<span class="step-check">${x.done ? icon("check", 13) : ""}</span><span class="grow">${t(x.key)}</span>${!x.done && x.href ? icon("arrow", 14) : ""}`;
+      return !x.done && x.href ? `<a class="step-item" href="${x.href}">${inner}</a>` : `<div class="step-item ${x.done ? "done" : ""}">${inner}</div>`;
+    }).join("");
 }
 
 function interviewCard(iv, title) {

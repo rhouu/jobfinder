@@ -909,13 +909,28 @@ def student_overview(user: User = Depends(student_only), db: Session = Depends(g
     jobs = db.scalars(_search_jobs(db))
     scored = sorted(((match_job(p, j), j) for j in jobs if j.id not in applied), key=lambda x: -x[0]["score"])
     missing = Counter(s for m, _ in scored[:10] for s in m["missing"])  # skills asked by your best matches
+    now = utcnow()
     upcoming = [{"application_id": a.id, "job": a.job.title, "company": a.job.company.name, **a.interview()}
-                for a in user.applications if a.interview_at and a.interview_at >= utcnow() - timedelta(hours=2)]
+                for a in user.applications if a.interview_at and a.interview_at >= now - timedelta(hours=2)]
+    recent = sorted(user.applications, key=lambda a: a.created_at, reverse=True)[:5]
+    # Saved offers that close in the next 14 days (soonest first)
+    closing = sorted((s.job for s in user.saved if s.job.status == "open" and s.job.deadline and now <= s.job.deadline <= now + timedelta(days=14)),
+                     key=lambda j: j.deadline)
+    unread = db.scalar(select(func.count(Message.id)).join(Application).where(
+        Application.student_id == user.id, Message.sender_id != user.id, Message.is_read.is_(False)))
     return {"completion": p.completion(), "applications": len(user.applications),
             "by_status": {s: by_status.get(s, 0) for s in STATUSES}, "saved": len(user.saved),
             "matches": [{**j.to_dict(), "match": m} for m, j in scored[:6]],
             "skill_gaps": [s for s, _ in missing.most_common(6)], "interviews": sorted(upcoming, key=lambda x: x["at"]),
-            "has_cv": bool(p.cv_html), "has_portfolio": bool(p.portfolio_html), "email_verified": user.email_verified}
+            "has_cv": bool(p.cv_html), "has_portfolio": bool(p.portfolio_html), "email_verified": user.email_verified,
+            # for the "next steps" checklist and the overview cards
+            "cv_file": bool(user.cv_file), "portfolio_public": p.portfolio_public, "unread_messages": unread,
+            "alerts": db.scalar(select(func.count(SavedSearch.id)).where(SavedSearch.user_id == user.id)),
+            "recent": [{"id": a.id, "status": a.status, "created_at": iso(a.created_at), "delivery": a.delivery.channel if a.delivery else "",
+                        "job": {"id": a.job.id, "title": a.job.title, "city": a.job.city, "type": a.job.type, "source": a.job.source},
+                        "company": a.job.company.to_dict()}
+                       for a in recent],
+            "deadlines": [{"id": j.id, "title": j.title, "deadline": iso(j.deadline), "company": j.company.to_dict()} for j in closing[:5]]}
 
 
 class ApplyIn(BaseModel):

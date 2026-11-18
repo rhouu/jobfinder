@@ -39,30 +39,49 @@
 
       <!-- Overview -->
       <section class="panel" id="panel-overview">
-        <div class="dash-head">
-          <div><p class="muted" id="greetDate"></p><h1 id="greet"></h1></div>
-          <a href="/jobs.html" class="btn btn-primary" data-i18n="dash.findOffers"></a>
+        <!-- Welcome banner: greeting, short summary, quick actions, profile strength -->
+        <div class="card dash-hero">
+          <div class="grow">
+            <p class="muted small" id="greetDate"></p>
+            <h1 id="greet"></h1>
+            <p class="dash-hero-sub" id="heroSummary"></p>
+            <div class="quick-actions">
+              <a class="qa" href="/jobs.html"><span class="qa-icon" style="--kc:#2e9e74"><i data-icon="search"></i></span><span data-i18n="dash.findOffers"></span></a>
+              <a class="qa" href="#profile"><span class="qa-icon" style="--kc:#9b7ede"><i data-icon="upload"></i></span><span data-i18n="dash.qaImport"></span></a>
+              <a class="qa" href="#cv"><span class="qa-icon" style="--kc:#5b8def"><i data-icon="file"></i></span><span data-i18n="side.cv"></span></a>
+              <a class="qa" href="#interview"><span class="qa-icon" style="--kc:#f2a33a"><i data-icon="mic"></i></span><span data-i18n="side.interview"></span></a>
+            </div>
+          </div>
+          <a class="dash-hero-strength" href="#profile">
+            <div id="heroRing"></div>
+            <strong data-i18n="side.strength"></strong>
+            <span class="muted small" id="completionTip"></span>
+          </a>
         </div>
+
+        <!-- Numbers (each one opens its tab) -->
         <div class="kpis">
-          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="nav.applications"></span><span class="k-icon" style="--kc:#5b8def"><i data-icon="mail"></i></span></div><div class="k-val" id="kApps">0</div></div>
-          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="dash.interviews"></span><span class="k-icon" style="--kc:#9b7ede"><i data-icon="calendar"></i></span></div><div class="k-val" id="kInterviews">0</div></div>
-          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="dash.accepted"></span><span class="k-icon" style="--kc:#2e9e74"><i data-icon="award"></i></span></div><div class="k-val" id="kAccepted">0</div></div>
-          <div class="card kpi"><div class="k-top"><span class="k-label" data-i18n="side.saved"></span><span class="k-icon" style="--kc:#f2a33a"><i data-icon="bookmark"></i></span></div><div class="k-val" id="kSaved">0</div></div>
+          <a class="card kpi kpi-link" href="#applications"><div class="k-top"><span class="k-label" data-i18n="nav.applications"></span><span class="k-icon" style="--kc:#5b8def"><i data-icon="mail"></i></span></div><div class="k-val" id="kApps">0</div><span class="k-sub" id="kAppsSub"></span></a>
+          <a class="card kpi kpi-link" href="#applications"><div class="k-top"><span class="k-label" data-i18n="dash.interviews"></span><span class="k-icon" style="--kc:#9b7ede"><i data-icon="calendar"></i></span></div><div class="k-val" id="kInterviews">0</div><span class="k-sub" id="kInterviewsSub"></span></a>
+          <a class="card kpi kpi-link" href="#messages"><div class="k-top"><span class="k-label" data-i18n="nav.messages"></span><span class="k-icon" style="--kc:#2e9e74"><i data-icon="chat"></i></span></div><div class="k-val" id="kMessages">0</div><span class="k-sub" id="kMessagesSub"></span></a>
+          <a class="card kpi kpi-link" href="#saved"><div class="k-top"><span class="k-label" data-i18n="side.saved"></span><span class="k-icon" style="--kc:#f2a33a"><i data-icon="bookmark"></i></span></div><div class="k-val" id="kSaved">0</div><span class="k-sub" id="kSavedSub"></span></a>
         </div>
+
         <div class="grid-3-1">
           <div class="stack">
             <div class="card" id="interviewsCard" hidden><div class="card-title"><h3 data-i18n="dash.upcoming"></h3></div><div id="interviews"></div></div>
+            <div class="card"><div class="card-title"><h3 data-i18n="dash.recent"></h3><a href="#applications" class="btn btn-ghost btn-sm" data-i18n="common.seeAll"></a></div><div id="recentApps"></div></div>
             <div class="card"><div class="card-title"><h3 data-i18n="dash.matches"></h3><a href="/jobs.html?sort=match" class="btn btn-ghost btn-sm" data-i18n="common.seeAll"></a></div><div id="matches"></div></div>
           </div>
           <div class="stack">
-            <div class="card">
-              <div class="card-title"><h3 data-i18n="side.strength"></h3><span class="badge" id="completionBadge">0%</span></div>
-              <div class="progress"><i id="completionBar"></i></div>
-              <p class="muted small" style="margin-top:12px" id="completionTip"></p>
-              <button class="btn btn-ghost btn-sm" data-go="profile" style="margin-top:12px" data-i18n="dash.complete"></button>
+            <div class="card" id="stepsCard">
+              <div class="card-title"><h3 data-i18n="dash.steps"></h3><span class="badge badge-green" id="stepsCount"></span></div>
+              <div class="progress" style="margin-bottom:14px"><i id="stepsBar"></i></div>
+              <div class="steps-list" id="stepsList"></div>
             </div>
-            <div class="card" id="gapsCard" hidden><h3 style="margin-bottom:4px" data-i18n="learn.title"></h3><p class="muted small" data-i18n="learn.subDash"></p><div id="gaps"></div></div>
+            <div class="card" id="deadlinesCard" hidden><div class="card-title"><h3 data-i18n="dash.deadlines"></h3></div><div id="deadlines"></div></div>
             <div class="card"><h3 style="margin-bottom:14px" data-i18n="dash.pipeline"></h3><div class="bar-chart" id="pipelineChart"></div></div>
+            <div class="card" id="gapsCard" hidden><h3 style="margin-bottom:4px" data-i18n="learn.title"></h3><p class="muted small" data-i18n="learn.subDash"></p><div id="gaps"></div></div>
           </div>
         </div>
       </section>
